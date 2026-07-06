@@ -82,7 +82,12 @@ function setAutoSendEnabled(on) {
 }
 
 function insertReply(body) {
-  input.value = body || '';
+  const text = body || '';
+  if (input.value && text) {
+    input.value = input.value + '\n' + text;
+  } else if (text) {
+    input.value = text;
+  }
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 140) + 'px';
   input.focus();
