@@ -157,6 +157,34 @@ func TestServeQuickReplyScriptEndpoint(t *testing.T) {
 	}
 }
 
+func TestServeProjectTrackerScriptEndpoint(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/projecttracker.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("projecttracker.js status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
+		t.Fatalf("projecttracker.js content-type = %q, want application/javascript", ct)
+	}
+	for _, want := range []string{"const FEATURE_STATUSES =", "function openFeatureTracker()", "function saveFeature()"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("projecttracker.js missing %q", want)
+		}
+	}
+}
+
 func TestServeQuickRepliesRoundTrip(t *testing.T) {
 	t.Setenv("REASONIX_HOME", t.TempDir())
 
@@ -200,6 +228,70 @@ func TestServeQuickRepliesRoundTrip(t *testing.T) {
 	got := strings.TrimSpace(string(body))
 	if got != payload {
 		t.Fatalf("quick replies round-trip = %s, want %s", got, payload)
+	}
+}
+
+func TestServeProjectFeaturesRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+
+	workspace := filepath.Join(t.TempDir(), "Projects", "reasonix")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	trackerDir := filepath.Join(home, "project-tracker")
+	if err := os.MkdirAll(trackerDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(trackerDir, "config.toml"), []byte(`base_dirs = ["`+filepath.ToSlash(filepath.Dir(workspace))+`"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc, WorkspaceRoot: workspace})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/project-features")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var initial struct {
+		Project struct {
+			ID string `json:"id"`
+		} `json:"project"`
+		Features []any `json:"features"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&initial); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if initial.Project.ID != "reasonix" {
+		t.Fatalf("initial project id = %q, want reasonix", initial.Project.ID)
+	}
+	if len(initial.Features) != 0 {
+		t.Fatalf("initial features = %+v, want empty", initial.Features)
+	}
+
+	payload := `{"features":[{"title":"Project Tracker","status":"wishlist","priority":"high","summary":"Plan it"}]}`
+	resp, err = http.Post(srv.URL+"/project-features", "application/json", strings.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Features []struct {
+			ID       string `json:"id"`
+			Title    string `json:"title"`
+			Status   string `json:"status"`
+			Priority string `json:"priority"`
+		} `json:"features"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&saved); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if len(saved.Features) != 1 || saved.Features[0].ID != "project-tracker" || saved.Features[0].Status != "wishlist" {
+		t.Fatalf("saved features = %+v, want generated id and saved status", saved.Features)
 	}
 }
 
@@ -499,6 +591,9 @@ func TestServeIndexIncludesQuickReplyScript(t *testing.T) {
 	html := string(indexHTML)
 	if !strings.Contains(html, `<script src="/quickreply.js"></script>`) {
 		t.Fatalf("serve index missing quick reply script tag:\n%s", html)
+	}
+	if !strings.Contains(html, `<script src="/projecttracker.js"></script>`) {
+		t.Fatalf("serve index missing project tracker script tag:\n%s", html)
 	}
 }
 

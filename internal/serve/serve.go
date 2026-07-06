@@ -27,6 +27,7 @@ import (
 	"reasonix/internal/event"
 	"reasonix/internal/jobs"
 	"reasonix/internal/nilutil"
+	"reasonix/internal/projecttracker"
 	"reasonix/internal/provider"
 	"reasonix/internal/quickreply"
 	"reasonix/internal/store"
@@ -37,6 +38,9 @@ var indexHTML []byte
 
 //go:embed quickreply.js
 var quickReplyJS []byte
+
+//go:embed projecttracker.js
+var projectTrackerJS []byte
 
 // Server wires a controller to its HTTP surface. The Broadcaster must be the
 // same sink the controller was constructed with, so events reach SSE clients.
@@ -67,6 +71,7 @@ type Server struct {
 	leases              *control.SessionLeaseKeeper
 	interactiveApproval bool
 	qr                  *quickreply.Manager // quick-reply templates
+	pt                  *projecttracker.Store
 }
 
 // New builds a Server. bc must be the controller's event sink.
@@ -78,6 +83,7 @@ func New(ctrl control.SessionAPI, bc *Broadcaster, serveCfg config.ServeConfig) 
 		titles: newTitleCache(ctrl.SessionDir()),
 		auth:   newAuthGate(serveCfg),
 		qr:     quickreply.NewManager(quickreply.DefaultPath(config.ReasonixHomeDir())),
+		pt:     projecttracker.NewStore(projecttracker.DefaultPath(config.ReasonixHomeDir())),
 	}
 	s.initTitleProvider()
 	rememberWorkspace(ctrl.WorkspaceRoot())
@@ -352,6 +358,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /quickreply.js", s.quickReplyScript)
 	mux.HandleFunc("GET /quick-replies", s.quickReplies)
 	mux.HandleFunc("POST /quick-replies", s.quickReplies)
+	mux.HandleFunc("GET /projecttracker.js", s.projectTrackerScript)
+	mux.HandleFunc("GET /project-features", s.projectFeatures)
+	mux.HandleFunc("POST /project-features", s.projectFeatures)
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
 	mux.HandleFunc("GET /workspaces", s.workspaces)
 	mux.HandleFunc("POST /switch-project", s.switchProjectHandler)
@@ -434,6 +443,11 @@ func (s *Server) index(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) quickReplyScript(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	_, _ = w.Write(quickReplyJS)
+}
+
+func (s *Server) projectTrackerScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	_, _ = w.Write(projectTrackerJS)
 }
 
 // sseKeepaliveInterval is how often the /events handler emits a `: ping`
@@ -1318,6 +1332,37 @@ func (s *Server) quickReplies(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// projectFeatures returns (GET) or saves (POST) the current workspace's
+// project-tracker feature list.
+func (s *Server) projectFeatures(w http.ResponseWriter, r *http.Request) {
+	workspaceRoot := s.ctl().WorkspaceRoot()
+	switch r.Method {
+	case http.MethodGet:
+		snap, err := s.pt.Load(workspaceRoot)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, snap)
+	case http.MethodPost:
+		var body struct {
+			Features []projecttracker.Feature `json:"features"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		snap, err := s.pt.Save(workspaceRoot, body.Features)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, snap)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
