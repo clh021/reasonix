@@ -32,50 +32,56 @@ const PRIORITY_LABELS = {
 
 const style = document.createElement('style');
 style.textContent =
-`.ft-shell{display:flex;flex:1;flex-direction:column;gap:14px;width:100%;min-width:0;min-height:0}
+`.ft-shell{display:flex;flex:1;flex-direction:column;gap:6px;width:100%;min-width:0;min-height:0}
 #ft-modal .modal{display:flex;flex-direction:column;width:min(960px,92vw);max-width:92vw;max-height:min(88vh,960px);overflow:hidden}
 #ft-modal .modal__body{display:flex;flex:1;min-height:0;overflow:hidden}
-.ft-headline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
-.ft-headline__meta{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
-.ft-headline__title{font-size:14px;font-weight:600;color:var(--fg)}
-.ft-headline__path{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all}
-.ft-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.ft-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg-2);font-size:13px;cursor:pointer}
+.ft-topbar{display:flex;align-items:center;gap:8px;padding:0 0 4px}
+.ft-search{display:flex;flex:1;align-items:center;gap:4px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel);min-width:0}
+.ft-search:focus-within{border-color:var(--accent)}
+.ft-search__icon{width:13px;height:13px;color:var(--muted-2);flex-shrink:0}
+.ft-search__input{flex:1;border:none;background:none;outline:none;font-size:12px;color:var(--fg);min-width:0}
+.ft-search__input::placeholder{color:var(--muted-2)}
+.ft-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--fg-2);font-size:12px;cursor:pointer;white-space:nowrap}
 .ft-btn:hover{color:var(--fg);border-color:var(--border-strong)}
 .ft-btn--primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .ft-btn--primary:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
 .ft-btn--primary:disabled{background:var(--panel-2);border-color:var(--border);color:var(--muted);cursor:default}
-.ft-list{display:flex;flex:1;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;padding-right:4px}
-.ft-section{display:flex;flex-direction:column;gap:8px}
-.ft-section__title{font-size:12px;font-weight:700;color:var(--fg-2);text-transform:uppercase;letter-spacing:.04em}
-.ft-empty{padding:20px 12px;border:1px dashed var(--border);border-radius:10px;text-align:center;color:var(--muted);font-size:13px}
-.ft-card{display:flex;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-2)}
-.ft-card__main{min-width:0;display:flex;flex-direction:column;gap:7px}
-.ft-card__title{font-size:14px;font-weight:600;color:var(--fg)}
-.ft-card__summary{font-size:12px;line-height:1.55;color:var(--fg-2);white-space:pre-wrap;word-break:break-word}
-.ft-card__notes{font-size:12px;line-height:1.55;color:var(--muted);white-space:pre-wrap;word-break:break-word}
-.ft-badges{display:flex;gap:6px;flex-wrap:wrap}
-.ft-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:10.5px;border:1px solid var(--border);background:var(--panel);color:var(--fg-2)}
+.ft-tabs{display:flex;gap:2px;padding:0;margin-bottom:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.ft-tabs::-webkit-scrollbar{display:none}
+.ft-tab{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:500;color:var(--fg-2);cursor:pointer;white-space:nowrap;border:none;background:none;transition:background .15s,color .15s}
+.ft-tab:hover{background:var(--panel);color:var(--fg)}
+.ft-tab--active{background:var(--accent-soft);color:var(--accent)}
+.ft-tab__badge{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:600;background:var(--panel-2);color:var(--muted)}
+.ft-tab--active .ft-tab__badge{background:var(--accent);color:#fff}
+.ft-list{display:flex;flex:1;flex-direction:column;gap:1px;min-height:0;overflow-y:auto;padding-right:2px}
+.ft-empty{padding:16px 10px;border:1px dashed var(--border);border-radius:8px;text-align:center;color:var(--muted);font-size:12px}
+.ft-row{display:flex;align-items:flex-start;gap:6px;padding:4px 6px;border-radius:5px;cursor:pointer;transition:background .12s ease}
+.ft-row:hover{background:var(--panel)}
+.ft-row__main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.ft-row__title{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:500;color:var(--fg);line-height:1.4;min-width:0}
+.ft-row__title-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ft-row__meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-height:0}
+.ft-row__summary{font-size:11px;line-height:1.4;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:400px}
+.ft-row__notes{font-size:10.5px;line-height:1.4;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.ft-badges{display:inline-flex;gap:3px;align-items:center}
+.ft-badge{display:inline-flex;align-items:center;padding:1px 5px;border-radius:99px;font-size:9.5px;border:1px solid var(--border);background:var(--panel);color:var(--fg-2);line-height:1.3}
 .ft-badge--priority-high{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
 .ft-badge--priority-medium{background:var(--warning-soft);border-color:transparent;color:var(--warning)}
 .ft-badge--priority-low{background:var(--success-soft);border-color:transparent;color:var(--success)}
-.ft-card__ops{display:flex;gap:6px;flex-shrink:0;align-items:flex-start}
-.ft-op{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);font-size:12px;color:var(--fg-2);cursor:pointer}
-.ft-op:hover{color:var(--fg);border-color:var(--border-strong)}
-.ft-op--danger{color:var(--danger)}
-.ft-op--danger:hover{background:var(--danger-soft);border-color:var(--danger)}
-.ft-editor{display:none;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-2)}
+.ft-btn--danger{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.ft-btn--danger:hover{background:var(--danger);border-color:var(--danger);color:#fff}
+.ft-editor{display:none;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-2);margin-top:4px}
 .ft-editor--open{display:block}
-.ft-editor__title{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px}
-.ft-form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
-.ft-form-row label{font-size:12px;font-weight:500;color:var(--fg-2)}
-.ft-form-row input,.ft-form-row textarea,.ft-form-row select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font-size:13px}
-.ft-form-row textarea{min-height:80px;resize:vertical}
+.ft-editor__title{font-size:12px;font-weight:600;color:var(--fg);margin-bottom:8px}
+.ft-form-row{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
+.ft-form-row label{font-size:11px;font-weight:500;color:var(--fg-2)}
+.ft-form-row input,.ft-form-row textarea,.ft-form-row select{width:100%;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font-size:12px}
+.ft-form-row textarea{min-height:50px;resize:vertical}
 .ft-form-row input:focus,.ft-form-row textarea:focus,.ft-form-row select:focus{outline:none;border-color:var(--accent)}
-.ft-grid{display:grid;grid-template-columns:1fr 180px 140px;gap:10px}
-.ft-error{display:none;color:var(--danger);font-size:12px;margin-top:-4px;margin-bottom:12px}
-.ft-editor__actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-@media(max-width:768px){#ft-modal .modal{width:min(94vw,94vw);max-width:94vw;max-height:90vh}.ft-headline{flex-direction:column;align-items:stretch}.ft-actions{justify-content:flex-start}.ft-grid{grid-template-columns:1fr}.ft-card{flex-direction:column}.ft-card__ops{justify-content:flex-end;flex-wrap:wrap}}
+.ft-grid{display:grid;grid-template-columns:1fr 140px 110px;gap:8px}
+.ft-error{display:none;color:var(--danger);font-size:11px;margin-top:-2px;margin-bottom:8px}
+.ft-editor__actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+@media(max-width:768px){#ft-modal .modal{width:min(94vw,94vw);max-width:94vw;max-height:90vh}.ft-topbar{flex-wrap:wrap}.ft-tabs{flex-wrap:wrap}.ft-grid{grid-template-columns:1fr}.ft-row{flex-wrap:wrap;gap:4px}.ft-row__meta{order:10;width:100%}}
 `;
 document.head.appendChild(style);
 
@@ -85,12 +91,15 @@ if (!composer || !composer.parentNode) {
   return;
 }
 
-let trackerProject = null;
 let trackerFeatures = [];
-let editingFeatureId = '';
+let editingFeatureId = null;
 let loading = false;
 let loadError = '';
 let loadingFeatures = false;
+let activeTab = 'wishlist';
+let searchQuery = '';
+let hasUserSelectedTab = false;
+let searchTimer = null;
 
 function statusLabel(status) {
   return STATUS_LABELS[lang]?.[status] || STATUS_LABELS.en[status] || status;
@@ -128,7 +137,7 @@ function setFeatureTrackerError(message) {
 }
 
 function hideFeatureEditor() {
-  editingFeatureId = '';
+  editingFeatureId = null;
   const editor = document.getElementById('ft-editor');
   if (!editor) return;
   editor.classList.remove('ft-editor--open');
@@ -144,16 +153,32 @@ function hideFeatureEditor() {
 function showFeatureEditor(feature) {
   const editor = document.getElementById('ft-editor');
   if (!editor) return;
-  editingFeatureId = feature?.id || '';
+  editingFeatureId = feature?.id || null;
   document.getElementById('ft-title').value = feature?.title || '';
   document.getElementById('ft-status').value = feature?.status || 'wishlist';
   document.getElementById('ft-priority').value = feature?.priority || 'medium';
   document.getElementById('ft-summary').value = feature?.summary || '';
   document.getElementById('ft-notes').value = feature?.notes || '';
   document.getElementById('ft-editor-title').textContent = editingFeatureId ? t('编辑特性', 'Edit Feature') : t('新增特性', 'Add Feature');
+  document.getElementById('ft-delete').style.display = editingFeatureId ? '' : 'none';
   setFeatureTrackerError('');
   editor.classList.add('ft-editor--open');
   document.getElementById('ft-title').focus();
+}
+
+function renderTabs() {
+  const tabs = document.getElementById('ft-tabs');
+  if (!tabs) return;
+  tabs.innerHTML = '';
+  FEATURE_STATUSES.forEach((status) => {
+    const count = trackerFeatures.filter((f) => f.status === status).length;
+    const tab = document.createElement('button');
+    tab.className = 'ft-tab' + (activeTab === status ? ' ft-tab--active' : '');
+    tab.type = 'button';
+    tab.dataset.status = status;
+    tab.innerHTML = escapeHTML(statusLabel(status)) + ' <span class="ft-tab__badge">' + count + '</span>';
+    tabs.appendChild(tab);
+  });
 }
 
 function renderFeatureSections() {
@@ -174,48 +199,49 @@ function renderFeatureSections() {
     list.appendChild(empty);
     return;
   }
-  if (!trackerFeatures.length) {
+  let filtered = trackerFeatures;
+  if (activeTab) {
+    filtered = filtered.filter((f) => f.status === activeTab);
+  }
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter((f) =>
+      f.title.toLowerCase().includes(q) ||
+      (f.summary && f.summary.toLowerCase().includes(q)) ||
+      (f.notes && f.notes.toLowerCase().includes(q))
+    );
+  }
+  if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'ft-empty';
-    empty.textContent = t('当前项目还没有特性条目，点击“新增特性”开始记录。', 'No features yet for this project. Click "Add Feature" to start tracking.');
+    empty.textContent = searchQuery
+      ? t('没有匹配的特性条目。', 'No matching features found.')
+      : t('当前标签下没有特性条目。', 'No features in this status.');
     list.appendChild(empty);
     return;
   }
-  FEATURE_STATUSES.forEach((status) => {
-    const items = trackerFeatures.filter((feature) => feature.status === status);
-    if (!items.length) return;
-    const section = document.createElement('section');
-    section.className = 'ft-section';
-    section.innerHTML = '<div class="ft-section__title">' + escapeHTML(statusLabel(status)) + '</div>';
-    items.forEach((feature) => {
-      const card = document.createElement('div');
-      card.className = 'ft-card';
-      card.innerHTML =
-        '<div class="ft-card__main">' +
-          '<div class="ft-card__title">' + escapeHTML(feature.title) + '</div>' +
-          '<div class="ft-badges">' +
-            '<span class="ft-badge">' + escapeHTML(statusLabel(feature.status)) + '</span>' +
-            '<span class="ft-badge ft-badge--priority-' + escapeHTML(feature.priority) + '">' + escapeHTML(priorityLabel(feature.priority)) + '</span>' +
-          '</div>' +
-          (feature.summary ? '<div class="ft-card__summary">' + escapeHTML(feature.summary) + '</div>' : '') +
-          (feature.notes ? '<div class="ft-card__notes">' + escapeHTML(feature.notes) + '</div>' : '') +
+  filtered.forEach((feature) => {
+    const row = document.createElement('div');
+    row.className = 'ft-row';
+    const p = FEATURE_PRIORITIES.includes(feature.priority) ? feature.priority : 'medium';
+    var metaHTML = '';
+    if (feature.summary) {
+      metaHTML += '<span class="ft-row__summary">' + escapeHTML(feature.summary) + '</span>';
+    }
+    if (feature.notes) {
+      metaHTML += '<span class="ft-row__notes">' + escapeHTML(feature.notes) + '</span>';
+    }
+    row.dataset.id = feature.id;
+    row.innerHTML =
+      '<div class="ft-row__main">' +
+        '<div class="ft-row__title">' +
+          '<span class="ft-badge ft-badge--priority-' + escapeHTML(p) + '">' + escapeHTML(priorityLabel(p)) + '</span>' +
+          '<span class="ft-row__title-text">' + escapeHTML(feature.title) + '</span>' +
         '</div>' +
-        '<div class="ft-card__ops">' +
-          '<button type="button" class="ft-op" data-action="edit" data-id="' + escapeHTML(feature.id) + '">' + t('编辑', 'Edit') + '</button>' +
-          '<button type="button" class="ft-op ft-op--danger" data-action="delete" data-id="' + escapeHTML(feature.id) + '">' + t('删除', 'Delete') + '</button>' +
-        '</div>';
-      section.appendChild(card);
-    });
-    list.appendChild(section);
+        '<div class="ft-row__meta">' + metaHTML + '</div>' +
+      '</div>';
+    list.appendChild(row);
   });
-}
-
-function renderFeatureTrackerMeta() {
-  const title = document.getElementById('ft-project-title');
-  const path = document.getElementById('ft-project-path');
-  if (!title || !path) return;
-  title.textContent = trackerProject?.name || t('当前项目', 'Current Project');
-  path.textContent = trackerProject?.root || '';
 }
 
 function persistFeatures(nextFeatures, onSuccess) {
@@ -226,19 +252,19 @@ function persistFeatures(nextFeatures, onSuccess) {
   setFeatureTrackerError('');
   fetch('/project-features', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
     body: JSON.stringify({features: nextFeatures})
   }).then((response) => {
     if (!response.ok) throw new Error('save failed');
     return response.json();
   }).then((snapshot) => {
-    trackerProject = snapshot.project || trackerProject;
     trackerFeatures = cloneFeatures(snapshot.features);
-    renderFeatureTrackerMeta();
+    renderTabs();
     renderFeatureSections();
     if (typeof onSuccess === 'function') onSuccess();
   }).catch((error) => {
-    setFeatureTrackerError(t('保存失败：' + error.message, 'Save failed: ' + error.message));
+    console.error('save failed', error);
+    setFeatureTrackerError(t('保存失败，请重试。', 'Save failed, please retry.'));
   }).finally(() => {
     loading = false;
     if (saveButton) saveButton.disabled = false;
@@ -255,10 +281,12 @@ function saveFeature() {
     setFeatureTrackerError(t('标题不能为空', 'Title is required'));
     return;
   }
+  const safeStatus = FEATURE_STATUSES.includes(status) ? status : 'wishlist';
+  const safePriority = FEATURE_PRIORITIES.includes(priority) ? priority : 'medium';
   const nextFeatures = cloneFeatures(trackerFeatures);
-  const next = {id: editingFeatureId, title, status, priority, summary, notes};
+  const next = {id: editingFeatureId, title, status: safeStatus, priority: safePriority, summary, notes};
   const index = nextFeatures.findIndex((feature) => feature.id === editingFeatureId);
-  if (editingFeatureId && index >= 0) {
+  if (index >= 0) {
     nextFeatures[index] = next;
   } else {
     nextFeatures.push(next);
@@ -267,9 +295,9 @@ function saveFeature() {
 }
 
 function deleteFeature(id) {
+  if (!id) return;
   const feature = trackerFeatures.find((item) => item.id === id);
   if (!feature) return;
-  if (!window.confirm(t('确认删除这个特性条目？', 'Delete this feature entry?'))) return;
   const nextFeatures = cloneFeatures(trackerFeatures).filter((item) => item.id !== id);
   persistFeatures(nextFeatures, () => {
     if (editingFeatureId === id) hideFeatureEditor();
@@ -277,25 +305,20 @@ function deleteFeature(id) {
 }
 
 function handleFeatureListClick(event) {
-  const btn = event.target.closest('[data-action]');
-  if (!btn) return;
-  const id = btn.dataset.id || '';
-  if (btn.dataset.action === 'edit') {
-    const feature = trackerFeatures.find((item) => item.id === id);
-    if (feature) showFeatureEditor(feature);
-    return;
-  }
-  if (btn.dataset.action === 'delete') {
-    deleteFeature(id);
-  }
+  const row = event.target.closest('.ft-row');
+  if (!row) return;
+  const id = row.dataset.id;
+  if (!id) return;
+  const feature = trackerFeatures.find((item) => item.id === id);
+  if (feature) showFeatureEditor(feature);
 }
 
 function loadFeatureTracker() {
+  if (loadingFeatures) return;
   loadingFeatures = true;
   loadError = '';
-  trackerProject = {name: t('加载中...', 'Loading...'), root: ''};
   trackerFeatures = [];
-  renderFeatureTrackerMeta();
+  renderTabs();
   renderFeatureSections();
   return fetch('/project-features')
     .then((response) => {
@@ -305,15 +328,19 @@ function loadFeatureTracker() {
     .then((snapshot) => {
       loadingFeatures = false;
       loadError = '';
-      trackerProject = snapshot.project || null;
       trackerFeatures = cloneFeatures(snapshot.features);
-      renderFeatureTrackerMeta();
+      // auto-select first non-empty tab only on initial load
+      if (!hasUserSelectedTab) {
+        const firstNonEmpty = FEATURE_STATUSES.find((s) => trackerFeatures.some((f) => f.status === s));
+        if (firstNonEmpty) activeTab = firstNonEmpty;
+      }
+      renderTabs();
       renderFeatureSections();
     })
     .catch(() => {
       loadingFeatures = false;
       loadError = t('加载项目特性失败，请稍后重试。', 'Failed to load project features. Please try again.');
-      renderFeatureTrackerMeta();
+      renderTabs();
       renderFeatureSections();
     });
 }
@@ -342,16 +369,16 @@ function ensureFeatureTrackerModal() {
   body.id = 'ft-modal-body';
   body.innerHTML =
     '<div class="ft-shell">' +
-      '<div class="ft-headline">' +
-        '<div class="ft-headline__meta">' +
-          '<div class="ft-headline__title" id="ft-project-title"></div>' +
-          '<div class="ft-headline__path" id="ft-project-path"></div>' +
+      '<div class="ft-topbar">' +
+        '<div class="ft-search">' +
+          '<svg class="ft-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>' +
+          '<input type="text" class="ft-search__input" id="ft-search" placeholder="' + t('搜索标题/描述...', 'Search title/notes...') + '" />' +
         '</div>' +
-        '<div class="ft-actions">' +
-          '<button type="button" class="ft-btn ft-btn--primary" id="ft-add">' + t('新增特性', 'Add Feature') + '</button>' +
-          '<button type="button" class="ft-btn" id="ft-refresh">' + t('刷新', 'Refresh') + '</button>' +
-        '</div>' +
+        '<button type="button" class="ft-btn ft-btn--primary" id="ft-add" title="' + t('新增特性', 'Add Feature') + '">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
+        '</button>' +
       '</div>' +
+      '<div class="ft-tabs" id="ft-tabs"></div>' +
       '<div class="ft-list" id="ft-list"></div>' +
       '<div class="ft-editor" id="ft-editor">' +
         '<div class="ft-editor__title" id="ft-editor-title"></div>' +
@@ -364,6 +391,7 @@ function ensureFeatureTrackerModal() {
         '<div class="ft-form-row"><label>' + t('备注', 'Notes') + '</label><textarea id="ft-notes"></textarea></div>' +
         '<div class="ft-error" id="ft-error"></div>' +
         '<div class="ft-editor__actions">' +
+          '<button type="button" class="ft-btn ft-btn--danger" id="ft-delete" style="margin-right:auto">' + t('删除此条目', 'Delete') + '</button>' +
           '<button type="button" class="ft-btn" id="ft-cancel">' + t('取消', 'Cancel') + '</button>' +
           '<button type="button" class="ft-btn ft-btn--primary" id="ft-save">' + t('保存', 'Save') + '</button>' +
         '</div>' +
@@ -397,9 +425,27 @@ function ensureFeatureTrackerModal() {
   document.getElementById('ft-close').onclick = closeFeatureTracker;
   document.getElementById('ft-cancel').onclick = hideFeatureEditor;
   document.getElementById('ft-save').onclick = saveFeature;
+  document.getElementById('ft-delete').onclick = function() {
+    if (editingFeatureId && window.confirm(t('确认删除这个特性条目？', 'Delete this feature entry?'))) {
+      deleteFeature(editingFeatureId);
+    }
+  };
   document.getElementById('ft-add').onclick = () => showFeatureEditor(null);
-  document.getElementById('ft-refresh').onclick = () => void loadFeatureTracker();
   document.getElementById('ft-list').onclick = handleFeatureListClick;
+  document.getElementById('ft-tabs').onclick = (event) => {
+    const tab = event.target.closest('.ft-tab');
+    if (!tab) return;
+    if (searchTimer) clearTimeout(searchTimer);
+    hasUserSelectedTab = true;
+    activeTab = tab.dataset.status;
+    renderTabs();
+    renderFeatureSections();
+  };
+  document.getElementById('ft-search').addEventListener('input', (event) => {
+    searchQuery = event.target.value;
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderFeatureSections, 150);
+  });
   overlay.onclick = (event) => {
     if (event.target === overlay) closeFeatureTracker();
   };
@@ -408,6 +454,7 @@ function ensureFeatureTrackerModal() {
 }
 
 function closeFeatureTracker() {
+  if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
   const modal = document.getElementById('ft-modal');
   if (modal) modal.style.display = 'none';
   hideFeatureEditor();
@@ -415,7 +462,12 @@ function closeFeatureTracker() {
 
 function openFeatureTracker() {
   const modal = ensureFeatureTrackerModal();
+  if (modal.style.display !== 'none') return; // already open
   modal.style.display = 'flex';
+  hasUserSelectedTab = false;
+  searchQuery = '';
+  const searchInput = document.getElementById('ft-search');
+  if (searchInput) searchInput.value = '';
   hideFeatureEditor();
   void loadFeatureTracker();
 }
