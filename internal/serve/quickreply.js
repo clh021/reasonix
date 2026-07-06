@@ -3,54 +3,57 @@
 
 const lang = (document.documentElement.lang || 'en').startsWith('zh') ? 'zh' : 'en';
 const t = (zh, en) => (lang === 'zh' ? zh : en);
+const AUTO_SEND_KEY = 'reasonix.quick_reply.auto_send';
 
 const style = document.createElement('style');
 style.textContent =
-`.qr-bar{display:flex;gap:5px;padding:3px 0 0;flex-wrap:wrap;align-items:center}
-.qr-bar--empty{justify-content:flex-end}
-.qr-btn{font-size:12px;padding:3px 9px;border-radius:5px;background:var(--bg-2);border:1px solid var(--border);color:var(--fg-2);transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;cursor:pointer}
-.qr-btn:hover{background:var(--panel);color:var(--fg);border-color:var(--border-strong)}
-.qr-btn--send{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
-.qr-btn--send:hover{background:var(--accent);color:#fff}
-.qr-btn--mgmt{font-size:14px;padding:3px 7px;margin-left:auto;opacity:.5}
-.qr-btn--mgmt:hover{opacity:1}
-.qr-form-row{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+`.qr-launch{display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-2);color:var(--fg-2);font-size:12px;cursor:pointer;transition:all .15s ease;white-space:nowrap}
+.qr-launch:hover{background:var(--panel);color:var(--fg);border-color:var(--border-strong)}
+.qr-shell{display:flex;flex-direction:column;gap:14px}
+.qr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.qr-toolbar__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.qr-toggle{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--fg-2)}
+.qr-toggle input{width:auto}
+.qr-list{display:flex;flex-direction:column;gap:8px;min-height:120px}
+.qr-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-2)}
+.qr-item__main{min-width:0}
+.qr-item__pick{display:block;width:100%;padding:0;border:none;background:none;text-align:left;cursor:pointer}
+.qr-item__pick:hover .qr-item__name{color:var(--accent)}
+.qr-item__name{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:4px;transition:color .15s ease}
+.qr-item__body{font-size:12px;line-height:1.5;color:var(--fg-2);white-space:pre-wrap;word-break:break-word}
+.qr-item__ops{display:flex;gap:6px;flex-shrink:0}
+.qr-op{padding:5px 9px;border-radius:7px;border:1px solid var(--border);background:var(--panel);color:var(--fg-2);font-size:12px;cursor:pointer}
+.qr-op:hover{color:var(--fg);border-color:var(--border-strong)}
+.qr-op--danger{color:var(--danger)}
+.qr-op--danger:hover{border-color:var(--danger);background:var(--danger-soft)}
+.qr-empty{padding:28px 12px;border:1px dashed var(--border);border-radius:10px;text-align:center;color:var(--muted);font-size:13px}
+.qr-editor{display:none;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-2)}
+.qr-editor--open{display:block}
+.qr-editor__title{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px}
+.qr-form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .qr-form-row label{font-size:12px;font-weight:500;color:var(--fg-2)}
-.qr-form-row input,.qr-form-row textarea{padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-2);color:var(--fg);font-size:13px;width:100%}
-.qr-form-row textarea{resize:vertical;min-height:60px}
-.qr-form-row input:focus,.qr-form-row textarea:focus{border-color:var(--accent);outline:none}
-.qr-form-row--inline{flex-direction:row;align-items:center;gap:8px}
-.qr-form-row input[type=checkbox]{width:auto}
-.qr-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius);background:var(--bg-2);border:1px solid var(--border);margin-bottom:6px}
-.qr-item__label{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.qr-item__badge{font-size:10px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
-.qr-item__del{padding:3px 8px;border-radius:4px;font-size:12px;color:var(--danger);cursor:pointer;transition:background .15s;border:none;background:none}
-.qr-item__del:hover{background:var(--danger-soft)}
-.qr-empty{padding:20px 0;text-align:center;color:var(--muted);font-size:13px}
-.qr-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
-.qr-actions button{padding:7px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
-.qr-btn-primary{background:var(--accent);color:#fff;border:none}
-.qr-btn-primary:hover{background:var(--accent-strong)}
-.qr-btn-primary:disabled{background:var(--panel-2);color:var(--muted);cursor:default}
-.qr-btn-secondary{background:var(--bg-2);color:var(--fg-2);border:1px solid var(--border)}
-.qr-btn-secondary:hover{background:var(--panel);color:var(--fg)}
-.qr-add-section{margin-top:16px;padding-top:12px;border-top:1px dashed var(--border)}
-.qr-add-section h4{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--fg-2)}
-.qr-error{color:var(--danger);font-size:12px;margin-top:4px;display:none}`;
+.qr-form-row input,.qr-form-row textarea{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font-size:13px}
+.qr-form-row textarea{min-height:92px;resize:vertical}
+.qr-form-row input:focus,.qr-form-row textarea:focus{outline:none;border-color:var(--accent)}
+.qr-error{display:none;color:var(--danger);font-size:12px;margin-top:-4px;margin-bottom:12px}
+.qr-editor__actions,.qr-modal__actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.qr-btn{padding:7px 14px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--fg-2)}
+.qr-btn:hover{color:var(--fg);border-color:var(--border-strong)}
+.qr-btn--primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.qr-btn--primary:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
+.qr-btn--primary:disabled{background:var(--panel-2);border-color:var(--border);color:var(--muted);cursor:default}
+.qr-btn--ghost{background:transparent}
+`;
 document.head.appendChild(style);
-
-let qrReplies = [];
-let modalReplies = null;
 
 const composer = document.querySelector('.composer');
 if (!composer || !composer.parentNode) {
   return;
 }
 
-const bar = document.createElement('div');
-bar.id = 'qr-bar';
-bar.className = 'qr-bar qr-bar--empty';
-composer.parentNode.insertBefore(bar, composer);
+let qrReplies = [];
+let editingIndex = -1;
+let saving = false;
 
 function escapeHTML(value) {
   return String(value)
@@ -64,75 +67,218 @@ function escapeHTML(value) {
 function cloneReplies(replies) {
   return (replies || []).map((reply) => ({
     name: reply.name || '',
-    body: reply.body || '',
-    autoSend: Boolean(reply.autoSend),
-    icon: reply.icon || ''
+    body: reply.body || ''
   }));
 }
 
-function renderBar() {
-  bar.innerHTML = '';
-  bar.classList.toggle('qr-bar--empty', qrReplies.length === 0);
+function autoSendEnabled() {
+  return window.localStorage.getItem(AUTO_SEND_KEY) === '1';
+}
 
-  const frag = document.createDocumentFragment();
-  qrReplies.forEach((reply) => {
-    const btn = document.createElement('button');
-    btn.className = 'qr-btn' + (reply.autoSend ? ' qr-btn--send' : '');
-    btn.textContent = (reply.icon || '▸') + ' ' + reply.name;
-    btn.title = reply.body;
-    btn.addEventListener('click', (event) => {
-      event.stopPropagation();
-      input.value = reply.body;
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 140) + 'px';
-      if (reply.autoSend) {
-        void send();
-        return;
-      }
-      input.focus();
-    });
-    frag.appendChild(btn);
+function setAutoSendEnabled(on) {
+  window.localStorage.setItem(AUTO_SEND_KEY, on ? '1' : '0');
+}
+
+function insertReply(body) {
+  input.value = body || '';
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  input.focus();
+  if (autoSendEnabled()) {
+    void send();
+  }
+}
+
+function closeModal() {
+  const modal = document.getElementById('qr-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  hideEditor();
+}
+
+function setError(message) {
+  const error = document.getElementById('qr-error');
+  if (!error) {
+    return;
+  }
+  error.textContent = message;
+  error.style.display = message ? 'block' : 'none';
+}
+
+function hideEditor() {
+  editingIndex = -1;
+  const editor = document.getElementById('qr-editor');
+  if (editor) {
+    editor.classList.remove('qr-editor--open');
+  }
+  const title = document.getElementById('qr-editor-title');
+  const name = document.getElementById('qr-name');
+  const body = document.getElementById('qr-body');
+  if (title) title.textContent = t('新增快捷回复', 'Add Quick Reply');
+  if (name) name.value = '';
+  if (body) body.value = '';
+  setError('');
+}
+
+function showEditor(index) {
+  editingIndex = typeof index === 'number' ? index : -1;
+  const editor = document.getElementById('qr-editor');
+  const title = document.getElementById('qr-editor-title');
+  const name = document.getElementById('qr-name');
+  const body = document.getElementById('qr-body');
+  if (!editor || !title || !name || !body) {
+    return;
+  }
+  if (editingIndex >= 0) {
+    const reply = qrReplies[editingIndex];
+    title.textContent = t('编辑快捷回复', 'Edit Quick Reply');
+    name.value = reply ? reply.name : '';
+    body.value = reply ? reply.body : '';
+  } else {
+    title.textContent = t('新增快捷回复', 'Add Quick Reply');
+    name.value = '';
+    body.value = '';
+  }
+  setError('');
+  editor.classList.add('qr-editor--open');
+  name.focus();
+}
+
+function renderList() {
+  const list = document.getElementById('qr-list');
+  if (!list) {
+    return;
+  }
+  list.innerHTML = '';
+  if (!qrReplies.length) {
+    const empty = document.createElement('div');
+    empty.className = 'qr-empty';
+    empty.textContent = t('暂无快捷回复，点击“新增”开始创建', 'No quick replies yet. Click "Add" to create one.');
+    list.appendChild(empty);
+    return;
+  }
+  qrReplies.forEach((reply, index) => {
+    const row = document.createElement('div');
+    row.className = 'qr-item';
+    row.innerHTML =
+      '<div class="qr-item__main">' +
+        '<button type="button" class="qr-item__pick" data-action="pick" data-index="' + index + '">' +
+          '<div class="qr-item__name">' + escapeHTML(reply.name) + '</div>' +
+          '<div class="qr-item__body">' + escapeHTML(reply.body) + '</div>' +
+        '</button>' +
+      '</div>' +
+      '<div class="qr-item__ops">' +
+        '<button type="button" class="qr-op" data-action="edit" data-index="' + index + '">' + t('编辑', 'Edit') + '</button>' +
+        '<button type="button" class="qr-op qr-op--danger" data-action="delete" data-index="' + index + '">' + t('删除', 'Delete') + '</button>' +
+      '</div>';
+    list.appendChild(row);
   });
-
-  const manage = document.createElement('button');
-  manage.className = 'qr-btn qr-btn--mgmt';
-  manage.textContent = '⚙';
-  manage.title = t('管理快捷回复', 'Manage quick replies');
-  manage.addEventListener('click', openModal);
-  frag.appendChild(manage);
-
-  bar.appendChild(frag);
-  bar.style.display = 'flex';
 }
 
-function loadReplies() {
-  fetch('/quick-replies')
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error('load failed');
-      }
-      return response.json();
-    })
-    .then((replies) => {
-      qrReplies = Array.isArray(replies) ? replies : [];
-      renderBar();
-    })
-    .catch(() => {
-      qrReplies = [];
-      renderBar();
-    });
+function persistReplies(nextReplies, onSuccess) {
+  if (saving) {
+    return;
+  }
+  saving = true;
+  const saveButton = document.getElementById('qr-save');
+  if (saveButton) {
+    saveButton.disabled = true;
+  }
+  setError('');
+  fetch('/quick-replies', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(nextReplies)
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error('save failed');
+    }
+    qrReplies = cloneReplies(nextReplies);
+    renderList();
+    if (typeof onSuccess === 'function') {
+      onSuccess();
+    }
+  }).catch((error) => {
+    setError(t('保存失败：' + error.message, 'Save failed: ' + error.message));
+  }).finally(() => {
+    saving = false;
+    if (saveButton) {
+      saveButton.disabled = false;
+    }
+  });
 }
 
-function openModal() {
-  modalReplies = cloneReplies(qrReplies);
+function saveReply() {
+  const nameField = document.getElementById('qr-name');
+  const bodyField = document.getElementById('qr-body');
+  if (!nameField || !bodyField) {
+    return;
+  }
+  const name = nameField.value.trim();
+  const body = bodyField.value.trim();
+  if (!name || !body) {
+    setError(t('名称和内容都不能为空', 'Name and message are required'));
+    return;
+  }
+  const nextReplies = cloneReplies(qrReplies);
+  const reply = {name, body};
+  if (editingIndex >= 0) {
+    nextReplies[editingIndex] = reply;
+  } else {
+    nextReplies.push(reply);
+  }
+  persistReplies(nextReplies, hideEditor);
+}
+
+function deleteReply(index) {
+  const reply = qrReplies[index];
+  if (!reply) {
+    return;
+  }
+  if (!window.confirm(t('确认删除此快捷回复？', 'Delete this quick reply?'))) {
+    return;
+  }
+  const nextReplies = cloneReplies(qrReplies);
+  nextReplies.splice(index, 1);
+  persistReplies(nextReplies, () => {
+    if (editingIndex === index) {
+      hideEditor();
+    } else if (editingIndex > index) {
+      editingIndex -= 1;
+    }
+  });
+}
+
+function handleListClick(event) {
+  const target = event.target.closest('[data-action]');
+  if (!target) {
+    return;
+  }
+  const index = Number(target.dataset.index);
+  const action = target.dataset.action;
+  if (action === 'pick') {
+    const reply = qrReplies[index];
+    if (!reply) {
+      return;
+    }
+    insertReply(reply.body);
+    closeModal();
+    return;
+  }
+  if (action === 'edit') {
+    showEditor(index);
+    return;
+  }
+  if (action === 'delete') {
+    deleteReply(index);
+  }
+}
+
+function ensureModal() {
   const existing = document.getElementById('qr-modal');
   if (existing) {
-    const modalBody = document.getElementById('qr-modal-body');
-    if (modalBody) {
-      buildModalBody(modalBody);
-    }
-    existing.style.display = 'flex';
-    return;
+    return existing;
   }
 
   const overlay = document.createElement('div');
@@ -144,163 +290,101 @@ function openModal() {
 
   const head = document.createElement('div');
   head.className = 'modal__head';
-  head.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-6"/></svg> ' +
+  head.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg> ' +
     t('快捷回复', 'Quick Replies') +
     '<span class="modal__close" id="qr-modal-close">&times;</span>';
 
   const body = document.createElement('div');
   body.className = 'modal__body';
   body.id = 'qr-modal-body';
-  buildModalBody(body);
+  body.innerHTML =
+    '<div class="qr-shell">' +
+      '<div class="qr-toolbar">' +
+        '<div class="qr-toolbar__actions">' +
+          '<button type="button" class="qr-btn qr-btn--primary" id="qr-add">' + t('新增', 'Add') + '</button>' +
+        '</div>' +
+        '<label class="qr-toggle"><input type="checkbox" id="qr-auto-send" />' + t('点击后自动发送', 'Auto-send after insert') + '</label>' +
+      '</div>' +
+      '<div class="qr-list" id="qr-list"></div>' +
+      '<div class="qr-editor" id="qr-editor">' +
+        '<div class="qr-editor__title" id="qr-editor-title"></div>' +
+        '<div class="qr-form-row"><label>' + t('名称', 'Name') + '</label><input id="qr-name" /></div>' +
+        '<div class="qr-form-row"><label>' + t('消息内容', 'Message') + '</label><textarea id="qr-body"></textarea></div>' +
+        '<div class="qr-error" id="qr-error"></div>' +
+        '<div class="qr-editor__actions">' +
+          '<button type="button" class="qr-btn qr-btn--ghost" id="qr-cancel-edit">' + t('取消', 'Cancel') + '</button>' +
+          '<button type="button" class="qr-btn qr-btn--primary" id="qr-save">' + t('保存', 'Save') + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="qr-modal__actions">' +
+        '<button type="button" class="qr-btn" id="qr-close">' + t('关闭', 'Close') + '</button>' +
+      '</div>' +
+    '</div>';
 
   modal.appendChild(head);
   modal.appendChild(body);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 
-  setTimeout(() => {
-    overlay.style.display = 'flex';
-  }, 10);
-
-  $('#qr-modal-close').onclick = () => {
-    overlay.style.display = 'none';
+  document.getElementById('qr-modal-close').onclick = closeModal;
+  document.getElementById('qr-close').onclick = closeModal;
+  document.getElementById('qr-add').onclick = () => showEditor(-1);
+  document.getElementById('qr-cancel-edit').onclick = hideEditor;
+  document.getElementById('qr-save').onclick = saveReply;
+  document.getElementById('qr-list').onclick = handleListClick;
+  document.getElementById('qr-auto-send').onchange = (event) => {
+    setAutoSendEnabled(Boolean(event.target.checked));
   };
   overlay.onclick = (event) => {
     if (event.target === overlay) {
-      overlay.style.display = 'none';
+      closeModal();
     }
   };
+
+  return overlay;
 }
 
-function setError(message) {
-  const error = $('#qr-error');
-  if (!error) {
-    return;
+function openComposerPicker() {
+  const modal = ensureModal();
+  const toggle = document.getElementById('qr-auto-send');
+  if (toggle) {
+    toggle.checked = autoSendEnabled();
   }
-  error.textContent = message;
-  error.style.display = message ? 'block' : 'none';
+  renderList();
+  hideEditor();
+  modal.style.display = 'flex';
 }
 
-function draftReply() {
-  return {
-    name: $('#qr-new-name').value.trim(),
-    body: $('#qr-new-body').value.trim(),
-    autoSend: $('#qr-new-auto').checked,
-    icon: $('#qr-new-icon').value.trim()
-  };
-}
-
-function persistReplies(nextReplies, options) {
-  const opts = options || {};
-  const saveButton = $('#qr-save');
-  if (saveButton) {
-    saveButton.disabled = true;
-  }
-  setError('');
-
-  fetch('/quick-replies', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(nextReplies)
-  }).then((response) => {
-    if (!response.ok) {
-      throw new Error('save failed');
-    }
-    qrReplies = nextReplies;
-    renderBar();
-    if (typeof opts.onSuccess === 'function') {
-      opts.onSuccess();
-    }
-  }).catch((error) => {
-    setError(t('保存失败：' + error.message, 'Save failed: ' + error.message));
-  }).finally(() => {
-    if (saveButton) {
-      saveButton.disabled = false;
-    }
-  });
-}
-
-function saveChanges() {
-  const draft = draftReply();
-  const hasName = draft.name !== '';
-  const hasBody = draft.body !== '';
-  if (hasName !== hasBody) {
-    setError(t('请同时填写名称和消息内容，或留空仅保存现有修改', 'Fill in both name and message, or leave both empty to save existing changes only'));
-    return;
-  }
-
-  const nextReplies = cloneReplies(modalReplies);
-  if (hasName && hasBody) {
-    nextReplies.push(draft);
-  }
-
-  persistReplies(nextReplies, {
-    onSuccess() {
-      modalReplies = null;
-      const modal = document.getElementById('qr-modal');
-      if (modal) {
-        modal.style.display = 'none';
+function loadReplies() {
+  return fetch('/quick-replies')
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('load failed');
       }
-    }
-  });
-}
-
-function buildModalBody(body) {
-  body.innerHTML = '';
-  const draftReplies = cloneReplies(modalReplies);
-
-  const list = document.createElement('div');
-  list.id = 'qr-list';
-  if (!draftReplies.length) {
-    const empty = document.createElement('div');
-    empty.className = 'qr-empty';
-    empty.textContent = t('暂无快捷回复，请在下方添加', 'No quick replies yet - add one below');
-    list.appendChild(empty);
-  } else {
-    draftReplies.forEach((reply, index) => {
-      const item = document.createElement('div');
-      item.className = 'qr-item';
-      item.innerHTML = '<span class="qr-item__label">' + escapeHTML(reply.icon || '') + ' ' + escapeHTML(reply.name) + '</span>' +
-        (reply.autoSend ? '<span class="qr-item__badge">' + t('自动', 'Auto') + '</span>' : '') +
-        '<button class="qr-item__del" data-idx="' + index + '">' + t('删除', 'Delete') + '</button>';
-      item.querySelector('.qr-item__del').addEventListener('click', () => {
-        if (!confirm(t('确认删除此快捷回复？', 'Delete this quick reply?'))) {
-          return;
-        }
-        modalReplies.splice(index, 1);
-        buildModalBody(body);
-      });
-      list.appendChild(item);
+      return response.json();
+    })
+    .then((replies) => {
+      qrReplies = cloneReplies(Array.isArray(replies) ? replies : []);
+      renderList();
+    })
+    .catch(() => {
+      qrReplies = [];
+      renderList();
     });
-  }
-  body.appendChild(list);
-
-  const addSection = document.createElement('div');
-  addSection.className = 'qr-add-section';
-  addSection.innerHTML = '<h4>' + t('添加快捷回复', 'Add Quick Reply') + '</h4>' +
-    '<div class="qr-form-row"><label>' + t('名称', 'Name') + '</label><input id="qr-new-name" /></div>' +
-    '<div class="qr-form-row"><label>' + t('消息内容', 'Message') + '</label><textarea id="qr-new-body" rows="3"></textarea></div>' +
-    '<div class="qr-form-row qr-form-row--inline"><label>' + t('图标', 'Icon') + '</label><input id="qr-new-icon" style="width:60px" /></div>' +
-    '<div class="qr-form-row qr-form-row--inline"><input type="checkbox" id="qr-new-auto" checked /><label>' + t('自动发送', 'Auto-send') + '</label></div>' +
-    '<div class="qr-error" id="qr-error"></div>';
-  body.appendChild(addSection);
-
-  const actions = document.createElement('div');
-  actions.className = 'qr-actions';
-  actions.innerHTML = '<button class="qr-btn-secondary" id="qr-cancel">' + t('取消', 'Cancel') + '</button>' +
-    '<button class="qr-btn-primary" id="qr-save">' + t('保存', 'Save') + '</button>';
-  body.appendChild(actions);
-
-  $('#qr-cancel').onclick = () => {
-    modalReplies = null;
-    const modal = document.getElementById('qr-modal');
-    if (modal) {
-      modal.style.display = 'none';
-    }
-  };
-  $('#qr-save').onclick = saveChanges;
 }
 
-renderBar();
-loadReplies();
+const launch = document.createElement('button');
+launch.type = 'button';
+launch.className = 'qr-launch';
+launch.innerHTML =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>' +
+  '<span>' + t('快捷回复', 'Quick Replies') + '</span>';
+launch.onclick = () => {
+  openComposerPicker();
+  void loadReplies();
+};
+composer.appendChild(launch);
+
+void loadReplies();
 })();

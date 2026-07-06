@@ -1,6 +1,7 @@
 package quickreply
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -21,14 +22,34 @@ func TestManagerSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "quick-replies.toml")
 	m := NewManager(path)
 	want := []QuickReply{
-		{Name: "Ack", Body: "On it", AutoSend: true, Icon: "+"},
-		{Name: "Draft", Body: "Let me think", AutoSend: false},
+		{Name: "Ack", Body: "On it"},
+		{Name: "Draft", Body: "Let me think"},
 	}
 
 	if err := m.Save(want); err != nil {
 		t.Fatal(err)
 	}
 	got := m.Load()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Load = %#v, want %#v", got, want)
+	}
+}
+
+func TestManagerLoadMigratesLegacyFieldsByIgnoringThem(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "quick-replies.toml")
+	if err := os.WriteFile(path, []byte(`
+[[quick_replies]]
+name = "Ack"
+body = "On it"
+auto_send = true
+icon = "+"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(path)
+	got := m.Load()
+	want := []QuickReply{{Name: "Ack", Body: "On it"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Load = %#v, want %#v", got, want)
 	}

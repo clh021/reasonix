@@ -150,7 +150,7 @@ func TestServeQuickReplyScriptEndpoint(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
 		t.Fatalf("quickreply.js content-type = %q, want application/javascript", ct)
 	}
-	for _, want := range []string{"function saveChanges()", "void send();", "modalReplies = cloneReplies(qrReplies);"} {
+	for _, want := range []string{"const AUTO_SEND_KEY =", "function openComposerPicker()", "function saveReply()"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("quickreply.js missing %q", want)
 		}
@@ -178,7 +178,7 @@ func TestServeQuickRepliesRoundTrip(t *testing.T) {
 		t.Fatalf("initial quick replies = %s, want []", string(body))
 	}
 
-	payload := `[{"name":"Ack","body":"On it","autoSend":true,"icon":"+"}]`
+	payload := `[{"name":"Ack","body":"On it"}]`
 	resp, err = http.Post(srv.URL+"/quick-replies", "application/json", strings.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)

@@ -43,7 +43,7 @@ func (m *Manager) Load() []QuickReply {
 	if s.QuickReplies == nil {
 		return []QuickReply{}
 	}
-	return s.QuickReplies
+	return sanitizeReplies(s.QuickReplies)
 }
 
 // Save atomically writes the provided quick replies to the TOML file.
@@ -56,7 +56,7 @@ func (m *Manager) Save(replies []QuickReply) error {
 	if replies == nil {
 		replies = []QuickReply{}
 	}
-	s := store{QuickReplies: replies}
+	s := store{QuickReplies: sanitizeReplies(replies)}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -91,6 +91,17 @@ func (m *Manager) Save(replies []QuickReply) error {
 	tmpFile.Close()
 	// Fallback: direct write when temp write fails.
 	return os.WriteFile(m.path, b, 0o644)
+}
+
+func sanitizeReplies(replies []QuickReply) []QuickReply {
+	out := make([]QuickReply, 0, len(replies))
+	for _, reply := range replies {
+		out = append(out, QuickReply{
+			Name: reply.Name,
+			Body: reply.Body,
+		})
+	}
+	return out
 }
 
 // DefaultPath returns the conventional path for the quick-replies file under

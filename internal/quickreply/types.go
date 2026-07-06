@@ -5,21 +5,13 @@
 // BurntSushi/toml, and never imports from internal/serve or internal/config.
 package quickreply
 
-// QuickReply is a single preset message the user can send with one click.
+// QuickReply is a single preset message template saved by the user.
 type QuickReply struct {
-	// Name is the button label shown in the UI.
+	// Name is the label shown in the quick-reply picker.
 	Name string `json:"name" toml:"name"`
 
-	// Body is the message text inserted or sent when the button is clicked.
+	// Body is the message text inserted into the composer when picked.
 	Body string `json:"body" toml:"body"`
-
-	// AutoSend controls behaviour on click:
-	//   true  – send the message immediately (calls /submit)
-	//   false – fill the composer input so the user can edit first.
-	AutoSend bool `json:"autoSend" toml:"auto_send"`
-
-	// Icon is an optional emoji or short string prepended to the button label.
-	Icon string `json:"icon,omitempty" toml:"icon,omitempty"`
 }
 
 // store is the on-disk structure serialised as TOML.
