@@ -254,7 +254,7 @@ input,textarea{font:inherit;color:inherit}
 
 /* session list */
 .session-list{flex:1;overflow-y:auto;padding:4px 6px;display:flex;flex-direction:column;gap:1px}
-.session-item{display:flex;align-items:center;gap:7px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--fg-2);transition:background .15s ease,color .15s ease;overflow:hidden}
+.session-item{display:flex;align-items:center;gap:7px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--fg-2);transition:background .15s ease,color .15s ease}
 .session-item:hover{background:var(--panel);color:var(--fg)}
 .session-item--active{background:var(--accent-soft);color:var(--accent)}
 .session-item__icon{flex-shrink:0;opacity:.5}
@@ -265,6 +265,13 @@ input,textarea{font:inherit;color:inherit}
 .session-del{flex-shrink:0;padding:2px 6px;color:var(--muted-2);font-size:14px;line-height:1;display:none}
 .session-item:hover .session-del,.session-del:focus-visible{display:inline-flex}
 .session-del:hover{color:var(--danger)}
+.project-switcher{padding:0 10px 10px}
+.project-switcher[hidden]{display:none}
+.project-switcher__row{display:flex;gap:6px}
+.project-switcher__select,.project-switcher__add{border:1px solid var(--border);background:var(--panel);color:var(--fg-2);border-radius:6px;font-size:12px}
+.project-switcher__select{flex:1;min-width:0;padding:6px 8px}
+.project-switcher__select:hover,.project-switcher__select:focus-visible,.project-switcher__add:hover,.project-switcher__add:focus-visible{color:var(--fg);border-color:var(--border-strong);outline:none}
+.project-switcher__add{flex:0 0 auto;padding:0 10px;cursor:pointer}
 
 @media(max-width:768px){
   .app{grid-template-columns:1fr}
@@ -309,6 +316,12 @@ input,textarea{font:inherit;color:inherit}
     <div class="sidebar__brand">
       <div class="sidebar__logo">R</div>
       <span class="sidebar__name">Reasonix</span>
+    </div>
+    <div class="project-switcher" id="project-switcher" hidden>
+      <div class="project-switcher__row">
+        <select class="project-switcher__select" id="project-select" title="__('switch_project')"></select>
+        <button class="project-switcher__add" id="project-add" type="button" title="__('add_project')">+</button>
+      </div>
     </div>
 <nav class="sidebar__nav" style="border-top:none;padding-top:0">
       <div class="sidebar__item sidebar__item--accent" id="btn-new">
@@ -505,6 +518,7 @@ const __T = {
     'connected': 'Connected',
     'reconnecting': 'Reconnecting...',
     'disconnected': 'Disconnected',
+    'waiting': 'Waiting for your response',
     'placeholder': 'Message Reasonix...  / for commands',
     'cmd_compact': 'Compact conversation',
     'cmd_new': 'New session',
@@ -525,6 +539,7 @@ const __T = {
     'cmd_verbose': 'Toggle reasoning',
     'cmd_help': 'Help',
     'submit': 'Submit',
+    'submit_failed': 'Failed to submit. Please try again.',
     'approval_title': 'Approval Required',
     'allow': 'Allow',
     'session': 'Allow for session',
@@ -564,6 +579,10 @@ const __T = {
     'scope_sumfrom': 'Summarize from here',
     'scope_sumupto': 'Summarize up to here',
     'delete_confirm': 'Delete this session?',
+    'switch_project': 'Switch project',
+    'add_project': 'Add project',
+    'project_none': 'No project',
+    'project_prompt': 'Enter project path:',
     'welcome_tag': 'AI coding agent',
     'hint_commands': '/ commands',
     'hint_mode': 'Plan',
@@ -608,6 +627,7 @@ const __T = {
     'connected': '已连接',
     'reconnecting': '重新连接...',
     'disconnected': '已断开',
+    'waiting': '等待你的回应',
     'placeholder': '给 Reasonix 发消息...  / 查看命令',
     'cmd_compact': '压缩对话',
     'cmd_new': '新建会话',
@@ -628,6 +648,7 @@ const __T = {
     'cmd_verbose': '切换推理显示',
     'cmd_help': '帮助',
     'submit': '提交',
+    'submit_failed': '提交失败，请重试。',
     'approval_title': '需要批准',
     'allow': '允许',
     'session': '本会话允许',
@@ -667,6 +688,10 @@ const __T = {
     'scope_sumfrom': '从此处总结',
     'scope_sumupto': '总结到此处',
     'delete_confirm': '删除此会话？',
+    'switch_project': '切换项目',
+    'add_project': '添加项目',
+    'project_none': '未选择项目',
+    'project_prompt': '输入项目路径：',
     'welcome_tag': 'AI 编码助手',
     'hint_commands': '/ 命令',
     'hint_mode': '计划',
@@ -737,9 +762,14 @@ const slashAnchor = $('#slash-menu-anchor');
 let running = false, planMode = false, bypassMode = false, toolApprovalMode = 'ask', yoloRestoreMode = 'ask';
 let goalMode = false, goalActive = false, goalText = '';
 let currentMsg = null, currentText = null, currentReasoning = null;
+let historyRendered = false;
+let pendingAsks = [];
+let pendingApprovals = [];
 let turnStartAt = 0, turnTokens = 0, tickTimer = null, retryStatus = null;
 let toolCards = {};
 let escTimer = null;
+const seenApprovals = new Set();
+const seenAsks = new Set();
 
 // ── slash commands registry ──
 const SLASH_CMDS = [
@@ -776,6 +806,24 @@ function fmtElapsed(ms) { const s=Math.floor(ms/1000); return s<60?s+'s':Math.fl
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escAttr(s) { return escHtml(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function el(tag,cls,text) { const e=document.createElement(tag); if(cls)e.className=cls; if(text)e.textContent=text; return e;}
+function resetPromptState() { historyRendered=false; pendingAsks=[]; pendingApprovals=[]; seenApprovals.clear(); seenAsks.clear(); }
+function flushPendingPrompts() {
+  historyRendered=true;
+  const asks=pendingAsks; const approvals=pendingApprovals;
+  pendingAsks=[]; pendingApprovals=[];
+  asks.forEach(renderAsk);
+  approvals.forEach(renderApproval);
+}
+function loadHistory() {
+  return fetch('/history').then(r=>r.json()).then(msgs=>{renderHistoryMessages(msgs);flushPendingPrompts();fetchTodos();}).catch(()=>{flushPendingPrompts();fetchTodos();});
+}
+function resetConversationView(clearTodos) {
+  log.innerHTML=''; toolCards={}; currentMsg=null; currentText=null; currentReasoning=null;
+  resetPromptState();
+  log.appendChild(welcome); welcome.style.display='';
+  todosDismissed=false;
+  if(clearTodos){todosState=[];renderTodoPanel();}
+}
 
 function setRunning(on) {
   running=on;
@@ -890,6 +938,12 @@ function dangerousBashCommand(command) {
     || /^fdisk\b/.test(command);
 }
 function showApproval(a) {
+  if (seenApprovals.has(a.id)) return;
+  seenApprovals.add(a.id);
+  renderApproval(a);
+}
+function renderApproval(a) {
+  if (!historyRendered) { pendingApprovals.push(a); return; }
   const d=el('div','approval');
   const prefix = a.tool === 'bash' ? bashCommandPrefix(a.subject) : '';
   const hasPrefix = prefix !== '';
@@ -907,18 +961,41 @@ function showApproval(a) {
   actions.push('<button class="approval__btn approval__btn--deny" data-allow="false"><span class="approval__key">N</span> '+__('deny')+'</button>');
   d.innerHTML='<div class="approval__header"><svg class="approval__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="approval__title">'+__('approval_title')+'</span></div><div class="approval__subject">'+escHtml(a.tool)+(a.subject?' — '+escHtml(a.subject):'')+'</div><div class="approval__actions">'+actions.join('')+'</div>';
   log.appendChild(d);scrollDown();
-  const resolve=payload=>{post('/approve',Object.assign({id:a.id},payload));d.remove();document.removeEventListener('keydown',onkey);};
-  d.querySelectorAll('.approval__btn').forEach(btn=>{btn.onclick=()=>resolve({allow:btn.dataset.allow==='true',session:btn.dataset.session==='true',persist:btn.dataset.persist==='true',scope:btn.dataset.scope||''});});
+  const buttons=Array.from(d.querySelectorAll('.approval__btn'));
+  let resolving=false;
+  const cleanup=()=>{seenApprovals.delete(a.id);d.remove();document.removeEventListener('keydown',onkey);};
+  const resolve=payload=>{
+    if(resolving)return;
+    resolving=true;
+    buttons.forEach(btn=>btn.disabled=true);
+    post('/approve',Object.assign({id:a.id},payload)).then(r=>{
+      if(!r.ok)throw new Error(String(r.status));
+      cleanup();
+    }).catch(()=>{
+      resolving=false;
+      buttons.forEach(btn=>btn.disabled=false);
+      log.appendChild(el('div','notice notice--warn',__('submit_failed')));
+      scrollDown();
+    });
+  };
+  buttons.forEach(btn=>{btn.onclick=()=>resolve({allow:btn.dataset.allow==='true',session:btn.dataset.session==='true',persist:btn.dataset.persist==='true',scope:btn.dataset.scope||''});});
   const onkey=e=>{const k=e.key.toLowerCase();if(k==='y'||k==='1'){resolve({allow:true,session:false});}else if(k==='a'||k==='2'){resolve({allow:true,session:true});}else if(hasPrefix&&k==='3'){resolve({allow:true,session:true,scope:'prefix'});}else if(k==='p'||(!hasPrefix&&k==='3')||(hasPrefix&&k==='4')){resolve({allow:true,session:true,persist:true,scope:hasPrefix?'prefix':''});}else if(k==='n'||k==='escape'||(!hasPrefix&&k==='4')||(hasPrefix&&k==='5')){resolve({allow:false,session:false});}};
   document.addEventListener('keydown',onkey);
 }
 
 // ── ask ──
 function showAsk(ask) {
+  if (seenAsks.has(ask.id)) return;
+  seenAsks.add(ask.id);
+  renderAsk(ask);
+}
+function renderAsk(ask) {
+  if (!historyRendered) { pendingAsks.push(ask); return; }
   const d=el('div','ask');
+  const selections=new Map();
   ask.questions.forEach(q=>{
     const qDiv=el('div'); qDiv.appendChild(el('div','ask__prompt',q.prompt));
-    const opts=el('div','ask__options'); const selected=new Set();
+    const opts=el('div','ask__options'); const selected=new Set(); selections.set(q.id, selected);
     q.options.forEach((o,i)=>{
       const opt=el('button','ask__opt'); opt.innerHTML='<div><div class="ask__opt-label">'+escHtml(o.label)+'</div>'+(o.description?'<div class="ask__opt-desc">'+escHtml(o.description)+'</div>':'')+'</div>';
       opt.onclick=()=>{if(q.multi){selected.has(i)?selected.delete(i):selected.add(i);opt.classList.toggle('ask__opt--selected',selected.has(i));}else{selected.clear();selected.add(i);opts.querySelectorAll('.ask__opt').forEach((o,j)=>o.classList.toggle('ask__opt--selected',j===i));}};
@@ -927,7 +1004,18 @@ function showAsk(ask) {
     qDiv.appendChild(opts);
     const submit=el('button','ask__submit',__('submit')); submit.disabled=true;
     opts.addEventListener('click',()=>{submit.disabled=selected.size===0;});
-    submit.onclick=()=>{const answers=ask.questions.map(qq=>({questionId:qq.id,selected:Array.from(selected).map(i=>qq.options[i].label)}));post('/answer',{id:ask.id,answers});d.remove();};
+    submit.onclick=()=>{
+      submit.disabled=true;
+      const answers=ask.questions.map(qq=>({questionId:qq.id,selected:Array.from(selections.get(qq.id)||[]).map(i=>qq.options[i].label)}));
+      post('/answer',{id:ask.id,answers}).then(r=>{
+        if(!r.ok)throw new Error(String(r.status));
+        seenAsks.delete(ask.id); d.remove();
+      }).catch(()=>{
+        submit.disabled=false;
+        log.appendChild(el('div','notice notice--warn',__('submit_failed')));
+        scrollDown();
+      });
+    };
     qDiv.appendChild(submit); d.appendChild(qDiv);
   });
   log.appendChild(d);scrollDown();
@@ -1111,6 +1199,15 @@ function fetchStatus(){
     if(typeof lastCost==='number')$('#sm-cost').textContent=fmtMoney(lastCost,s.lastUsage?.currency);
     if(s.balance){$('#sm-balance').textContent=s.balance.display||'--';}
     if(s.balance)balanceInfo.textContent='💰 '+(s.balance.display||'--');
+    if(s.running&&!running)setRunning(true);
+    if(s.pendingPrompt){
+      if(!running)setRunning(true);
+      statusDot.className='status__dot status__dot--busy';
+      statusDotSidebar.className=statusDot.className;
+      statusDot.style.background='var(--warning)';
+      statusDotSidebar.style.background='var(--warning)';
+      statusText.textContent='⏳ '+__('waiting');
+    }
   }).catch(()=>{});
 }
 setInterval(fetchStatus,30000);
@@ -1148,13 +1245,14 @@ function renderHistoryMessages(ms){
   });
   currentMsg=null;currentText=null;currentReasoning=null; scrollDown();
 }
-fetch('/history').then(r=>r.json()).then(msgs=>{renderHistoryMessages(msgs);fetchTodos();}).catch(()=>{});
+resetPromptState();
+loadHistory();
 
 // ── session list ──
 let sessionCount=0;
 function loadSessions(){
   sessionCount=0;
-  fetch('/sessions').then(r=>r.json()).then(ss=>{
+  return fetch('/sessions').then(r=>r.json()).then(ss=>{
     const list=$('#session-list'); if(!list)return;
     if(!ss||ss.length===0){list.innerHTML='<div style="padding:10px;color:var(--muted-2);font-size:12px">'+__('no_sessions')+'</div>';return;}
     list.innerHTML='';
@@ -1165,7 +1263,7 @@ function loadSessions(){
       const title=s.title||name.replace(/^\w+-/,'').replace(/T/,' ').replace(/[-_]/g,' ').slice(0,30);
       const meta=s.turns?s.turns+' turns':'';
 	      item.innerHTML='<svg class="session-item__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><div class="session-item__body"><div class="session-item__title">'+escHtml(title)+'</div><div class="session-item__meta">'+escHtml(meta)+'</div></div><button type="button" class="session-del" data-name="'+escAttr(s.name)+'" title="'+escAttr(__('delete_confirm'))+'">&times;</button>';
-      item.onclick=()=>{if(running||s.current)return;post('/resume',{path:s.path}).then(()=>{log.innerHTML='';log.appendChild(welcome);welcome.style.display='';todosDismissed=false;loadSessions();setTimeout(()=>fetch('/history').then(r=>r.json()).then(msgs=>{renderHistoryMessages(msgs);fetchTodos();}),300);});};
+      item.onclick=()=>{if(running||s.current)return;post('/resume',{path:s.path}).then(()=>{resetConversationView(false);loadSessions();setTimeout(()=>void loadHistory(),300);});};
       list.appendChild(item);
     });
   }).catch(()=>{const list=$('#session-list');if(list)list.innerHTML='<div style="padding:10px;color:var(--muted-2);font-size:12px">'+__('error_loading')+'</div>';});
@@ -1318,11 +1416,85 @@ $('#btn-plan').onclick=()=>void setPlan(!planMode);
 $('#btn-bypass').onclick=()=>void toggleYolo();
 $('#btn-goal').onclick=()=>toggleGoalMode();
 $('#goal-chip').onclick=()=>toggleGoalMode();
-$('#btn-new').onclick=()=>{if(running)return;post('/new').then(()=>{log.innerHTML='';log.appendChild(welcome);welcome.style.display='';todosState=[];todosDismissed=false;renderTodoPanel();loadSessions();});};
+$('#btn-new').onclick=()=>{if(running)return;post('/new').then(()=>{resetConversationView(true);loadSessions();void loadHistory();});};
 $('#btn-compact').onclick=()=>{if(!running)post('/compact');};
 $('#btn-rewind').onclick=()=>openRewindPicker();
 $('#btn-tree').onclick=()=>{post('/submit',{input:'/tree'});};
 $('#btn-stats').onclick=()=>openStats();
+
+// ── project switcher ──
+let currentWorkspaceRoot = '';
+let switchingProject = false;
+function workspaceLabel(path) {
+  if(!path) return __('project_none');
+  const parts=String(path).split(/[\\/]/).filter(Boolean);
+  return parts.length?parts[parts.length-1]:path;
+}
+function setProjectSwitcherBusy(on) {
+  switchingProject=on;
+  $('#project-select').disabled=on;
+  $('#project-add').disabled=on;
+}
+function renderWorkspaceOptions(workspaces, current) {
+  const select=$('#project-select');
+  const switcher=$('#project-switcher');
+  if(!select||!switcher) return;
+  select.innerHTML='';
+  const seen=new Set();
+  const items=[];
+  if(current) items.push({path:current,name:workspaceLabel(current)});
+  (workspaces||[]).forEach(ws=>{if(ws&&ws.path)items.push(ws);});
+  items.forEach(ws=>{
+    if(!ws.path||seen.has(ws.path)) return;
+    seen.add(ws.path);
+    const opt=document.createElement('option');
+    opt.value=ws.path;
+    opt.textContent=ws.name||workspaceLabel(ws.path);
+    if(ws.path===current) opt.selected=true;
+    select.appendChild(opt);
+  });
+  if(!select.options.length){
+    const opt=document.createElement('option');
+    opt.value='';
+    opt.textContent=__('project_none');
+    opt.selected=true;
+    select.appendChild(opt);
+  }
+  switcher.hidden=false;
+}
+function loadWorkspaces() {
+  return fetch('/workspaces').then(r=>r.json()).then(data=>{
+    currentWorkspaceRoot=data.current||'';
+    renderWorkspaceOptions(data.workspaces||[], currentWorkspaceRoot);
+  }).catch(()=>{});
+}
+function switchProject(path) {
+  if(!path||path===currentWorkspaceRoot||switchingProject||running) return Promise.resolve();
+  setProjectSwitcherBusy(true);
+  return post('/switch-project',{path}).then(r=>{
+    if(!r.ok) throw new Error(String(r.status));
+    return r.json();
+  }).then(data=>{
+    currentWorkspaceRoot=data.workspaceRoot||path;
+    resetConversationView(true);
+    return Promise.all([loadWorkspaces(), loadSessions(), loadHistory()]).then(()=>fetchStatus());
+  }).catch(()=>{
+    log.appendChild(el('div','notice notice--warn',__('submit_failed')));
+    scrollDown();
+    return loadWorkspaces();
+  }).finally(()=>setProjectSwitcherBusy(false));
+}
+$('#project-select').onchange=e=>{
+  const next=e.target.value;
+  if(!next||next===currentWorkspaceRoot) return;
+  void switchProject(next);
+};
+$('#project-add').onclick=()=>{
+  if(switchingProject||running) return;
+  const path=window.prompt(__('project_prompt'), currentWorkspaceRoot||'');
+  if(path) void switchProject(path.trim());
+};
+void loadWorkspaces();
 
 // ── mobile sidebar toggle ──
 const sidebar=$('.sidebar'), overlay=$('#sidebar-overlay'), menuBtn=$('#menu-btn');

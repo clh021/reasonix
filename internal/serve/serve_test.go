@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"reasonix/internal/agent"
 	"reasonix/internal/config"
 	"reasonix/internal/control"
+	"reasonix/internal/event"
 	"reasonix/internal/eventwire"
 	"reasonix/internal/jobs"
 	"reasonix/internal/provider"
@@ -26,6 +28,17 @@ import (
 type fakeRunner struct{ got chan string }
 
 func (f fakeRunner) Run(_ context.Context, input string) error { f.got <- input; return nil }
+
+type askBlockingRunner struct{ c *control.Controller }
+
+func (r *askBlockingRunner) Run(ctx context.Context, _ string) error {
+	_, err := r.c.Ask(ctx, []event.AskQuestion{{
+		ID:      "choice",
+		Prompt:  "Pick one",
+		Options: []event.AskOption{{Label: "A"}, {Label: "B"}},
+	}})
+	return err
+}
 
 func TestServeSubmitRunsAndBroadcastsTurnDone(t *testing.T) {
 	bc := NewBroadcaster()
@@ -209,6 +222,107 @@ func TestServeSubmitRejectsShellShortcut(t *testing.T) {
 	case in := <-got:
 		t.Fatalf("runner should not run shell submit, got %q", in)
 	default:
+	}
+}
+
+func TestServeStatusIncludesPendingPrompt(t *testing.T) {
+	bc := NewBroadcaster()
+	asks := make(chan event.Ask, 1)
+	sink := event.FuncSink(func(e event.Event) {
+		bc.Emit(e)
+		if e.Kind == event.AskRequest {
+			asks <- e.Ask
+		}
+	})
+	runner := &askBlockingRunner{}
+	ctrl := control.New(control.Options{Runner: runner, Sink: sink})
+	runner.c = ctrl
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	ctrl.Send("ask user")
+	select {
+	case <-asks:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for ask request")
+	}
+
+	resp, err := http.Get(srv.URL + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Running       bool `json:"running"`
+		PendingPrompt bool `json:"pendingPrompt"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Running || !body.PendingPrompt {
+		t.Fatalf("status = %+v, want running pendingPrompt", body)
+	}
+}
+
+func TestServeEventsReplayPendingPromptOnConnect(t *testing.T) {
+	bc := NewBroadcaster()
+	asks := make(chan event.Ask, 1)
+	sink := event.FuncSink(func(e event.Event) {
+		bc.Emit(e)
+		if e.Kind == event.AskRequest {
+			select {
+			case asks <- e.Ask:
+			default:
+			}
+		}
+	})
+	runner := &askBlockingRunner{}
+	ctrl := control.New(control.Options{Runner: runner, Sink: sink})
+	runner.c = ctrl
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	ctrl.Send("ask user")
+	select {
+	case <-asks:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for initial ask request")
+	}
+
+	resp, err := http.Get(srv.URL + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for replayed ask_request")
+		default:
+		}
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				t.Fatalf("scan SSE: %v", err)
+			}
+			t.Fatal("SSE stream closed before replay")
+		}
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var wire eventwire.Event
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &wire); err != nil {
+			t.Fatalf("decode SSE event: %v", err)
+		}
+		if wire.Kind == "ask_request" {
+			if wire.Ask == nil || len(wire.Ask.Questions) == 0 {
+				t.Fatalf("replayed ask payload missing questions: %+v", wire.Ask)
+			}
+			return
+		}
 	}
 }
 

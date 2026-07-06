@@ -462,6 +462,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprint(w, ": connected\n\n") // open the stream immediately
 	flusher.Flush()
+	s.ctl().ReplayPendingPrompts()
 
 	keepalive := time.NewTicker(sseKeepaliveInterval)
 	defer keepalive.Stop()
@@ -1016,6 +1017,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	sess := map[string]any{
 		"label":            s.ctl().Label(),
 		"running":          s.ctl().Running(),
+		"pendingPrompt":    s.ctl().PendingPrompt(),
 		"plan":             s.ctl().PlanMode(),
 		"autoApproveTools": s.ctl().AutoApproveTools(),
 		"bypass":           s.ctl().AutoApproveTools(),
