@@ -597,6 +597,13 @@ func TestServeIndexIncludesQuickReplyScript(t *testing.T) {
 	}
 }
 
+func TestServeIndexIncludesFooterActionsHost(t *testing.T) {
+	html := string(indexHTML)
+	if !strings.Contains(html, `<div class="footer-actions" id="footer-actions"></div>`) {
+		t.Fatalf("serve index missing footer actions host:\n%s", html)
+	}
+}
+
 func TestServeIndexHandlesRetryingEvents(t *testing.T) {
 	html := string(indexHTML)
 	for _, want := range []string{

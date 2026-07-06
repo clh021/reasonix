@@ -32,9 +32,7 @@ const PRIORITY_LABELS = {
 
 const style = document.createElement('style');
 style.textContent =
-`.ft-launch{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--bg-2);color:var(--fg-2);font-size:12px;cursor:pointer;transition:all .15s ease;flex-shrink:0;white-space:nowrap}
-.ft-launch:hover{background:var(--panel);color:var(--fg);border-color:var(--border-strong)}
-.ft-shell{display:flex;flex:1;flex-direction:column;gap:14px;width:100%;min-width:0;min-height:0}
+`.ft-shell{display:flex;flex:1;flex-direction:column;gap:14px;width:100%;min-width:0;min-height:0}
 #ft-modal .modal{display:flex;flex-direction:column;width:min(960px,92vw);max-width:92vw;max-height:min(88vh,960px);overflow:hidden}
 #ft-modal .modal__body{display:flex;flex:1;min-height:0;overflow:hidden}
 .ft-headline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
@@ -82,6 +80,7 @@ style.textContent =
 document.head.appendChild(style);
 
 const composer = document.querySelector('.composer');
+const actionHost = document.getElementById('footer-actions');
 if (!composer || !composer.parentNode) {
   return;
 }
@@ -423,15 +422,20 @@ function openFeatureTracker() {
 
 const launch = document.createElement('button');
 launch.type = 'button';
-launch.className = 'ft-launch';
+launch.className = 'footer-action ft-launch';
+launch.style.order = '10';
 launch.innerHTML =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' +
   '<span>' + t('特性', 'Features') + '</span>';
 launch.onclick = openFeatureTracker;
-const sendButton = document.getElementById('btn-send');
-if (sendButton) {
-  composer.insertBefore(launch, sendButton);
+if (actionHost) {
+  actionHost.appendChild(launch);
 } else {
-  composer.appendChild(launch);
+  const sendButton = document.getElementById('btn-send');
+  if (sendButton) {
+    composer.insertBefore(launch, sendButton);
+  } else {
+    composer.appendChild(launch);
+  }
 }
 })();

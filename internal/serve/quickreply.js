@@ -7,9 +7,7 @@ const AUTO_SEND_KEY = 'reasonix.quick_reply.auto_send';
 
 const style = document.createElement('style');
 style.textContent =
-`.qr-launch{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--bg-2);color:var(--fg-2);font-size:12px;cursor:pointer;transition:all .15s ease;white-space:nowrap;flex-shrink:0}
-.qr-launch:hover{background:var(--panel);color:var(--fg);border-color:var(--border-strong)}
-.qr-shell{display:flex;flex:1;flex-direction:column;gap:14px;width:100%;min-width:0;min-height:0}
+`.qr-shell{display:flex;flex:1;flex-direction:column;gap:14px;width:100%;min-width:0;min-height:0}
 #qr-modal .modal{display:flex;flex-direction:column;width:min(760px,92vw);max-width:92vw;max-height:min(88vh,900px);overflow:hidden}
 #qr-modal .modal__body{display:flex;flex:1;min-height:0;overflow:hidden}
 .qr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -50,6 +48,7 @@ style.textContent =
 document.head.appendChild(style);
 
 const composer = document.querySelector('.composer');
+const actionHost = document.getElementById('footer-actions');
 if (!composer || !composer.parentNode) {
   return;
 }
@@ -379,7 +378,8 @@ function loadReplies() {
 
 const launch = document.createElement('button');
 launch.type = 'button';
-launch.className = 'qr-launch';
+launch.className = 'footer-action qr-launch';
+launch.style.order = '20';
 launch.innerHTML =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>' +
   '<span>' + t('快捷回复', 'Quick Replies') + '</span>';
@@ -387,7 +387,11 @@ launch.onclick = () => {
   openComposerPicker();
   void loadReplies();
 };
-composer.appendChild(launch);
+if (actionHost) {
+  actionHost.appendChild(launch);
+} else {
+  composer.appendChild(launch);
+}
 
 void loadReplies();
 })();
