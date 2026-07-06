@@ -96,9 +96,14 @@ func (m *Manager) Save(replies []QuickReply) error {
 func sanitizeReplies(replies []QuickReply) []QuickReply {
 	out := make([]QuickReply, 0, len(replies))
 	for _, reply := range replies {
+		cat := reply.Category
+		if !ValidCategoryID(cat) {
+			cat = ""
+		}
 		out = append(out, QuickReply{
-			Name: reply.Name,
-			Body: reply.Body,
+			Name:     reply.Name,
+			Body:     reply.Body,
+			Category: cat,
 		})
 	}
 	return out

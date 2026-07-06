@@ -361,6 +361,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /quickreply.js", s.quickReplyScript)
 	mux.HandleFunc("GET /quick-replies", s.quickReplies)
 	mux.HandleFunc("POST /quick-replies", s.quickReplies)
+	mux.HandleFunc("GET /quick-reply-categories", s.quickReplyCategories)
 	mux.HandleFunc("GET /projecttracker.js", s.projectTrackerScript)
 	mux.HandleFunc("GET /repoactions.js", s.repoActionsScript)
 	mux.HandleFunc("GET /project-features", s.projectFeatures)
@@ -1345,6 +1346,11 @@ func (s *Server) quickReplies(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// quickReplyCategories returns the list of predefined quick-reply categories.
+func (s *Server) quickReplyCategories(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, quickreply.DefaultCategories())
 }
 
 // projectFeatures returns (GET) or saves (POST) the current workspace's

@@ -14,6 +14,13 @@ style.textContent =
 .qr-toolbar__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .qr-toggle{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--fg-2)}
 .qr-toggle input{width:auto}
+.qr-tabs{display:flex;gap:2px;padding:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.qr-tabs::-webkit-scrollbar{display:none}
+.qr-tab{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:500;color:var(--fg-2);cursor:pointer;white-space:nowrap;border:none;background:none;transition:background .15s,color .15s}
+.qr-tab:hover{background:var(--panel);color:var(--fg)}
+.qr-tab--active{background:var(--accent-soft);color:var(--accent)}
+.qr-tab__badge{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:600;background:var(--panel-2);color:var(--muted)}
+.qr-tab--active .qr-tab__badge{background:var(--accent);color:#fff}
 .qr-list{display:flex;flex:1;flex-direction:column;gap:8px;min-height:0;overflow-y:auto;padding-right:4px}
 .qr-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-2)}
 .qr-item__main{min-width:0}
@@ -32,9 +39,9 @@ style.textContent =
 .qr-editor__title{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px}
 .qr-form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .qr-form-row label{font-size:12px;font-weight:500;color:var(--fg-2)}
-.qr-form-row input,.qr-form-row textarea{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font-size:13px}
+.qr-form-row input,.qr-form-row textarea,.qr-form-row select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font-size:13px}
 .qr-form-row textarea{min-height:92px;resize:vertical}
-.qr-form-row input:focus,.qr-form-row textarea:focus{outline:none;border-color:var(--accent)}
+.qr-form-row input:focus,.qr-form-row textarea:focus,.qr-form-row select:focus{outline:none;border-color:var(--accent)}
 .qr-error{display:none;color:var(--danger);font-size:12px;margin-top:-4px;margin-bottom:12px}
 .qr-editor__actions,.qr-modal__actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .qr-btn{padding:7px 14px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--fg-2)}
@@ -54,8 +61,10 @@ if (!composer || !composer.parentNode) {
 }
 
 let qrReplies = [];
+let categories = [];
 let editingIndex = -1;
 let saving = false;
+let activeCategory = ''; // '' = show all
 
 function escapeHTML(value) {
   return String(value)
@@ -69,7 +78,8 @@ function escapeHTML(value) {
 function cloneReplies(replies) {
   return (replies || []).map((reply) => ({
     name: reply.name || '',
-    body: reply.body || ''
+    body: reply.body || '',
+    category: reply.category || ''
   }));
 }
 
@@ -134,22 +144,65 @@ function showEditor(index) {
   const title = document.getElementById('qr-editor-title');
   const name = document.getElementById('qr-name');
   const body = document.getElementById('qr-body');
-  if (!editor || !title || !name || !body) {
+  const catSelect = document.getElementById('qr-category');
+  if (!editor || !title || !name || !body || !catSelect) {
     return;
   }
+
+  // Build category dropdown options from loaded categories
+  catSelect.innerHTML = '';
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = t('无分类', 'No category');
+  catSelect.appendChild(noneOpt);
+  categories.forEach((cat) => {
+    const opt = document.createElement('option');
+    opt.value = cat.id;
+    opt.textContent = lang === 'zh' ? cat.name_zh : cat.name_en;
+    catSelect.appendChild(opt);
+  });
+
   if (editingIndex >= 0) {
     const reply = qrReplies[editingIndex];
     title.textContent = t('编辑快捷回复', 'Edit Quick Reply');
     name.value = reply ? reply.name : '';
     body.value = reply ? reply.body : '';
+    catSelect.value = reply ? (reply.category || '') : '';
   } else {
     title.textContent = t('新增快捷回复', 'Add Quick Reply');
     name.value = '';
     body.value = '';
+    // Default to the currently active category when adding a new reply
+    catSelect.value = activeCategory || '';
   }
   setError('');
   editor.classList.add('qr-editor--open');
   name.focus();
+}
+
+function renderCategoryTabs() {
+  const tabs = document.getElementById('qr-tabs');
+  if (!tabs) return;
+  tabs.innerHTML = '';
+
+  // "All" tab — always first
+  const allTab = document.createElement('button');
+  allTab.className = 'qr-tab' + (activeCategory === '' ? ' qr-tab--active' : '');
+  allTab.type = 'button';
+  allTab.dataset.category = '';
+  allTab.innerHTML = t('全部', 'All') + ' <span class="qr-tab__badge">' + qrReplies.length + '</span>';
+  tabs.appendChild(allTab);
+
+  // One tab per category
+  categories.forEach((cat) => {
+    const count = qrReplies.filter((r) => r.category === cat.id).length;
+    const tab = document.createElement('button');
+    tab.className = 'qr-tab' + (activeCategory === cat.id ? ' qr-tab--active' : '');
+    tab.type = 'button';
+    tab.dataset.category = cat.id;
+    tab.innerHTML = escapeHTML(lang === 'zh' ? cat.name_zh : cat.name_en) + ' <span class="qr-tab__badge">' + count + '</span>';
+    tabs.appendChild(tab);
+  });
 }
 
 function renderList() {
@@ -158,26 +211,37 @@ function renderList() {
     return;
   }
   list.innerHTML = '';
-  if (!qrReplies.length) {
+
+  // Map with original index so edit/delete still refer to the correct item
+  const indexed = qrReplies.map((reply, idx) => ({ reply, idx }));
+  let filtered = indexed;
+  if (activeCategory) {
+    filtered = filtered.filter((item) => item.reply.category === activeCategory);
+  }
+
+  if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'qr-empty';
-    empty.textContent = t('暂无快捷回复，点击“新增”开始创建', 'No quick replies yet. Click "Add" to create one.');
+    empty.textContent = activeCategory
+      ? t('此分类暂无快捷回复', 'No quick replies in this category.')
+      : t('暂无快捷回复，点击\u201c新增\u201d开始创建', 'No quick replies yet. Click "Add" to create one.');
     list.appendChild(empty);
     return;
   }
-  qrReplies.forEach((reply, index) => {
+
+  filtered.forEach(({ reply, idx }) => {
     const row = document.createElement('div');
     row.className = 'qr-item';
     row.innerHTML =
       '<div class="qr-item__main">' +
-        '<button type="button" class="qr-item__pick" data-action="pick" data-index="' + index + '">' +
+        '<button type="button" class="qr-item__pick" data-action="pick" data-index="' + idx + '">' +
           '<div class="qr-item__name">' + escapeHTML(reply.name) + '</div>' +
           '<div class="qr-item__body">' + escapeHTML(reply.body) + '</div>' +
         '</button>' +
       '</div>' +
       '<div class="qr-item__ops">' +
-        '<button type="button" class="qr-op" data-action="edit" data-index="' + index + '">' + t('编辑', 'Edit') + '</button>' +
-        '<button type="button" class="qr-op qr-op--danger" data-action="delete" data-index="' + index + '">' + t('删除', 'Delete') + '</button>' +
+        '<button type="button" class="qr-op" data-action="edit" data-index="' + idx + '">' + t('编辑', 'Edit') + '</button>' +
+        '<button type="button" class="qr-op qr-op--danger" data-action="delete" data-index="' + idx + '">' + t('删除', 'Delete') + '</button>' +
       '</div>';
     list.appendChild(row);
   });
@@ -202,6 +266,7 @@ function persistReplies(nextReplies, onSuccess) {
       throw new Error('save failed');
     }
     qrReplies = cloneReplies(nextReplies);
+    renderCategoryTabs();
     renderList();
     if (typeof onSuccess === 'function') {
       onSuccess();
@@ -219,17 +284,19 @@ function persistReplies(nextReplies, onSuccess) {
 function saveReply() {
   const nameField = document.getElementById('qr-name');
   const bodyField = document.getElementById('qr-body');
-  if (!nameField || !bodyField) {
+  const catField = document.getElementById('qr-category');
+  if (!nameField || !bodyField || !catField) {
     return;
   }
   const name = nameField.value.trim();
   const body = bodyField.value.trim();
+  const category = catField.value || '';
   if (!name || !body) {
     setError(t('名称和内容都不能为空', 'Name and message are required'));
     return;
   }
   const nextReplies = cloneReplies(qrReplies);
-  const reply = {name, body};
+  const reply = { name, body, category };
   if (editingIndex >= 0) {
     nextReplies[editingIndex] = reply;
   } else {
@@ -313,10 +380,12 @@ function ensureModal() {
         '</div>' +
         '<label class="qr-toggle"><input type="checkbox" id="qr-auto-send" />' + t('点击后自动发送', 'Auto-send after insert') + '</label>' +
       '</div>' +
+      '<div class="qr-tabs" id="qr-tabs"></div>' +
       '<div class="qr-list" id="qr-list"></div>' +
       '<div class="qr-editor" id="qr-editor">' +
         '<div class="qr-editor__title" id="qr-editor-title"></div>' +
         '<div class="qr-form-row"><label>' + t('名称', 'Name') + '</label><input id="qr-name" /></div>' +
+        '<div class="qr-form-row"><label>' + t('分类', 'Category') + '</label><select id="qr-category"></select></div>' +
         '<div class="qr-form-row"><label>' + t('消息内容', 'Message') + '</label><textarea id="qr-body"></textarea></div>' +
         '<div class="qr-error" id="qr-error"></div>' +
         '<div class="qr-editor__actions">' +
@@ -343,6 +412,13 @@ function ensureModal() {
   document.getElementById('qr-auto-send').onchange = (event) => {
     setAutoSendEnabled(Boolean(event.target.checked));
   };
+  document.getElementById('qr-tabs').onclick = (event) => {
+    const tab = event.target.closest('.qr-tab');
+    if (!tab) return;
+    activeCategory = tab.dataset.category || '';
+    renderCategoryTabs();
+    renderList();
+  };
   overlay.onclick = (event) => {
     if (event.target === overlay) {
       closeModal();
@@ -358,6 +434,7 @@ function openComposerPicker() {
   if (toggle) {
     toggle.checked = autoSendEnabled();
   }
+  renderCategoryTabs();
   renderList();
   hideEditor();
   modal.style.display = 'flex';
@@ -373,11 +450,29 @@ function loadReplies() {
     })
     .then((replies) => {
       qrReplies = cloneReplies(Array.isArray(replies) ? replies : []);
+      renderCategoryTabs();
       renderList();
     })
     .catch(() => {
       qrReplies = [];
+      renderCategoryTabs();
       renderList();
+    });
+}
+
+function loadCategories() {
+  return fetch('/quick-reply-categories')
+    .then((response) => {
+      if (!response.ok) throw new Error('load categories failed');
+      return response.json();
+    })
+    .then((data) => {
+      categories = Array.isArray(data) ? data : [];
+      renderCategoryTabs();
+    })
+    .catch(() => {
+      categories = [];
+      renderCategoryTabs();
     });
 }
 
@@ -390,7 +485,6 @@ launch.innerHTML =
   '<span>' + t('快捷回复', 'Quick Replies') + '</span>';
 launch.onclick = () => {
   openComposerPicker();
-  void loadReplies();
 };
 if (actionHost) {
   actionHost.appendChild(launch);
@@ -398,5 +492,7 @@ if (actionHost) {
   composer.appendChild(launch);
 }
 
-void loadReplies();
+Promise.all([loadReplies(), loadCategories()]).catch(function() {
+  // both already call render functions on error
+});
 })();
