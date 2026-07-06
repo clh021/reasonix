@@ -28,11 +28,15 @@ import (
 	"reasonix/internal/jobs"
 	"reasonix/internal/nilutil"
 	"reasonix/internal/provider"
+	"reasonix/internal/quickreply"
 	"reasonix/internal/store"
 )
 
 //go:embed index.html
 var indexHTML []byte
+
+//go:embed quickreply.js
+var quickReplyJS []byte
 
 // Server wires a controller to its HTTP surface. The Broadcaster must be the
 // same sink the controller was constructed with, so events reach SSE clients.
@@ -62,6 +66,7 @@ type Server struct {
 	// disables lease gating.
 	leases              *control.SessionLeaseKeeper
 	interactiveApproval bool
+	qr                  *quickreply.Manager // quick-reply templates
 }
 
 // New builds a Server. bc must be the controller's event sink.
@@ -72,6 +77,7 @@ func New(ctrl control.SessionAPI, bc *Broadcaster, serveCfg config.ServeConfig) 
 		bc:     bc,
 		titles: newTitleCache(ctrl.SessionDir()),
 		auth:   newAuthGate(serveCfg),
+		qr:     quickreply.NewManager(quickreply.DefaultPath(config.ReasonixHomeDir())),
 	}
 	s.initTitleProvider()
 	rememberWorkspace(ctrl.WorkspaceRoot())
@@ -343,6 +349,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /sessions", s.sessions)
 	mux.HandleFunc("GET /skills", s.skills)
 	mux.HandleFunc("GET /todos", s.todos)
+	mux.HandleFunc("GET /quickreply.js", s.quickReplyScript)
+	mux.HandleFunc("GET /quick-replies", s.quickReplies)
+	mux.HandleFunc("POST /quick-replies", s.quickReplies)
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
 	mux.HandleFunc("GET /workspaces", s.workspaces)
 	mux.HandleFunc("POST /switch-project", s.switchProjectHandler)
@@ -420,6 +429,11 @@ func (s *Server) index(w http.ResponseWriter, _ *http.Request) {
 	html := string(indexHTML)
 	html = strings.ReplaceAll(html, "__LANG__", lang)
 	_, _ = w.Write([]byte(html))
+}
+
+func (s *Server) quickReplyScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	_, _ = w.Write(quickReplyJS)
 }
 
 // sseKeepaliveInterval is how often the /events handler emits a `: ping`
@@ -1284,4 +1298,25 @@ func (s *Server) todos(w http.ResponseWriter, _ *http.Request) {
 		out[i] = todoItem{Content: t.Content, Status: t.Status, ActiveForm: t.ActiveForm, Level: t.Level}
 	}
 	writeJSON(w, out)
+}
+
+// quickReplies returns (GET) or saves (POST) the user-configured quick-reply templates.
+func (s *Server) quickReplies(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, s.qr.Load())
+	case http.MethodPost:
+		var replies []quickreply.QuickReply
+		if err := json.NewDecoder(r.Body).Decode(&replies); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if err := s.qr.Save(replies); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }

@@ -116,6 +116,80 @@ func TestServeEndpoints(t *testing.T) {
 	}
 }
 
+func TestServeQuickReplyScriptEndpoint(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/quickreply.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("quickreply.js status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
+		t.Fatalf("quickreply.js content-type = %q, want application/javascript", ct)
+	}
+	for _, want := range []string{"function saveChanges()", "void send();", "modalReplies = cloneReplies(qrReplies);"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("quickreply.js missing %q", want)
+		}
+	}
+}
+
+func TestServeQuickRepliesRoundTrip(t *testing.T) {
+	t.Setenv("REASONIX_HOME", t.TempDir())
+
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/quick-replies")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(body)) != "[]" {
+		t.Fatalf("initial quick replies = %s, want []", string(body))
+	}
+
+	payload := `[{"name":"Ack","body":"On it","autoSend":true,"icon":"+"}]`
+	resp, err = http.Post(srv.URL+"/quick-replies", "application/json", strings.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("quick replies POST status = %d, want 204", resp.StatusCode)
+	}
+
+	resp, err = http.Get(srv.URL + "/quick-replies")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.TrimSpace(string(body))
+	if got != payload {
+		t.Fatalf("quick replies round-trip = %s, want %s", got, payload)
+	}
+}
+
 func TestServeSubmitRejectsShellShortcut(t *testing.T) {
 	bc := NewBroadcaster()
 	got := make(chan string, 1)
@@ -304,6 +378,13 @@ func TestServeIndexDefinesQueryHelpers(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Fatalf("serve index missing query helper %q", want)
 		}
+	}
+}
+
+func TestServeIndexIncludesQuickReplyScript(t *testing.T) {
+	html := string(indexHTML)
+	if !strings.Contains(html, `<script src="/quickreply.js"></script>`) {
+		t.Fatalf("serve index missing quick reply script tag:\n%s", html)
 	}
 }
 
