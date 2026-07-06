@@ -222,8 +222,9 @@ git checkout -b lianghong-use-rebuild-YYYYMMDD origin/main-v2
 1. 文档与忽略项
 2. `serve` 项目切换 / workspace 持久化
 3. `serve` quick reply
-4. `serve` 前端局部补丁
-5. 桌面端独立 bugfix
+4. `serve` project feature tracker
+5. `serve` 前端局部补丁
+6. 桌面端独立 bugfix
 
 每组都单独提交，目标是让最终历史接近：
 
@@ -232,7 +233,8 @@ origin/main-v2
   └─ commit A: docs / repo-local ignore
   └─ commit B: serve project switch + workspace persistence
   └─ commit C: serve quick reply
-  └─ commit D: transcript final scroll fix
+  └─ commit D: serve project feature tracker
+  └─ commit E: transcript final scroll fix
 ```
 
 整理分支验证通过后，再决定是否替换正式分支：
@@ -356,7 +358,7 @@ git commit -m "Merge origin/main-v2 into lianghong-use"
 ### Go 后端验证
 
 ```bash
-go test ./internal/serve/...
+go test ./internal/serve/... ./internal/quickreply ./internal/projecttracker
 ```
 
 ### 桌面前端静态验证
@@ -406,7 +408,7 @@ git diff --stat origin/main-v2..lianghong-use
 
 明确列出执行过哪些验证，例如：
 
-- `go test ./internal/serve/...`
+- `go test ./internal/serve/... ./internal/quickreply ./internal/projecttracker`
 - `pnpm typecheck`
 
 ### 5. 风险说明
@@ -435,7 +437,7 @@ git diff --stat origin/main-v2..lianghong-use
 - `path/to/file-b`: ...
 
 本次验证：
-- `go test ./internal/serve/...`
+- `go test ./internal/serve/... ./internal/quickreply ./internal/projecttracker`
 - `pnpm typecheck`
 
 后续主要维护风险点：
@@ -445,20 +447,80 @@ git diff --stat origin/main-v2..lianghong-use
 
 ---
 
-## 当前 `lianghong-use` 的建议认知
+## 当前 `lianghong-use` 的分支级特性台账
 
-在本文档编写时，`lianghong-use` 相对 `origin/main-v2` 的自定义代码已被收敛到很小范围，重点只剩：
+本节是 `lianghong-use` 相对 `origin/main-v2` 的**分支级自维护特性清单**。
 
-1. `serve` 端项目切换能力
-2. workspace 列表持久化
-3. 一处桌面端 transcript 流结束后的补滚动修复
+以后只要发生下面任一情况，**必须同时更新本节**：
 
-这意味着以后新增需求时，建议继续遵守下面原则：
+1. 新增了一个只存在于 `lianghong-use` 的特性或 bugfix
+2. 某个已有自维护特性被上游 `main-v2` 正式覆盖
+3. 某个特性被我们主动删除、放弃或重构为不同实现
+4. 某个特性的主要承载文件发生明显变化
 
-- 新需求优先做成独立文件
-- 如果只是局部 bugfix，不要做全局重写
-- 每次同步都以“减少相对上游的残留代码”为目标
-- 每次同步优先重建干净分支，而不是继续堆旧 merge 历史
+换句话说：**特性代码改了，这张表也必须一起改。**
+
+### 状态标记
+
+- `当前自维护`：上游未覆盖，下一次从 `origin/main-v2` 重建时必须考虑重放
+- `已被上游覆盖`：上游已有等价或更完整实现；同步时应删除我们的实现，并保留简短记录
+- `待观察`：需求已明确，但当前还没有实际进入 `lianghong-use` 的代码实现
+- `已放弃`：曾经考虑或实现过，但现在不再保留
+
+### 当前清单
+
+| 状态 | 特性 | 说明 | 主要承载文件 | 合并时默认动作 |
+| --- | --- | --- | --- | --- |
+| `当前自维护` | `serve` 项目切换 | Web `serve` 界面支持切换当前项目目录 | `internal/serve/project_switch.go` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则删除我们的切换实现 |
+| `当前自维护` | workspace 列表持久化 | 记住并恢复 `serve` 端最近使用的项目列表 | `internal/serve/workspace.go` `internal/serve/workspace_test.go` `internal/serve/project_switch.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则删除我们的持久化实现 |
+| `当前自维护` | Web UI 快捷回复 | 快捷回复列表、管理弹窗、插入输入框、前端自动发送偏好 | `internal/quickreply/types.go` `internal/quickreply/quickreply.go` `internal/quickreply/quickreply_test.go` `internal/serve/quickreply.js` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则优先采用上游并删除我们的版本 |
+| `当前自维护` | 项目特性追踪列表 | 按当前项目维护 wishlist / 当前自维护 / 已被上游覆盖等特性条目 | `internal/projecttracker/types.go` `internal/projecttracker/store.go` `internal/projecttracker/store_test.go` `internal/serve/projecttracker.js` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` `docs/PROJECT_FEATURE_TRACKER_DESIGN.zh-CN.md` `docs/templates/project-tracker/README.md` | 上游若无等价实现，则继续重放；若已覆盖，则迁移到上游实现并删除本地代码 |
+| `当前自维护` | 桌面端 transcript 收尾补滚动 | streaming 结束后继续把 transcript 视图钉到底部 | `desktop/frontend/src/components/Transcript.tsx` | 若上游仍无此修复则保留；若上游已修复则删除我们的补丁 |
+| `当前自维护` | `serve` 会话列表裁切样式修复 | 移除 `.session-item` 的 `overflow: hidden`，避免会话列表内容被裁切 | `internal/serve/index.html` | 每次同步后复查上游样式；若上游仍保留该属性，则重新移除 |
+
+### 维护规则
+
+#### 1. 新增自定义特性时
+
+提交代码时必须同步补充本表，至少写清楚：
+
+- 状态
+- 特性名称
+- 用户可见能力
+- 主要承载文件
+- 上游覆盖后应如何处理
+
+#### 2. 上游覆盖某个特性时
+
+不要只删代码，不改文档。必须同时把该条目改成：
+
+- `已被上游覆盖`
+- 写清楚从哪个同步周期开始被覆盖
+- 删除或收缩对应的本地实现文件说明
+
+如果该能力已经完全不再需要关注，也可以在完成一次稳定同步后直接从“当前清单”移除，并在同步汇报中说明本次已删除。
+
+#### 3. 每次同步前都用本表做审计
+
+重建 `lianghong-use` 时，不要只看文件 diff，还要逐项对照本表：
+
+- 哪些 `当前自维护` 条目本次仍需重放
+- 哪些条目已经被上游覆盖，可以不再重放
+- 哪些条目的主要承载文件发生了变化，需要调整重放策略
+
+#### 4. 每次同步后的汇报也要引用本表
+
+同步完成后的汇报中，至少要明确：
+
+- 本表哪些条目状态发生了变化
+- 哪些 `当前自维护` 条目仍然存在
+- 哪些条目已被上游覆盖并被删除
+
+### 建议配套动作
+
+- 如果同时在 Web UI 的 project feature tracker 中维护了 Reasonix 自身特性，也应把对应条目状态同步更新
+- 如果某个条目已经不止一次在合并时产生冲突，优先继续把它收敛到独立文件或更小接线点
+- 新需求优先做成独立文件，不要为了实现一个特性顺手扩大上游核心文件 diff 面
 
 ---
 
