@@ -204,6 +204,18 @@ export function Transcript({
     };
   }, []);
 
+  // When streaming ends (live → undefined), do a final layout-aware scroll
+  // so the composer stays visible even after deferred rendering (code
+  // highlighting, Markdown layout) settles.
+  const wasStreaming = useRef(false);
+  const isStreaming = live !== undefined && items.length > 0;
+  useEffect(() => {
+    if (wasStreaming.current && !isStreaming) {
+      scrollToBottomAfterLayout(3);
+    }
+    wasStreaming.current = isStreaming;
+  }, [isStreaming, scrollToBottomAfterLayout]);
+
   // ResizeObserver for container height changes.
   useEffect(() => {
     const el = scrollRef.current;
