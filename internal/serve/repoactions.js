@@ -159,7 +159,7 @@ function ensureMenu() {
       '<svg class="ra-menu__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>' +
       '<span class="ra-menu__body">' +
         '<span class="ra-menu__title">Git Push</span>' +
-        '<span class="ra-menu__desc">' + t('保留仓库推送入口，当前未启用实际执行。', 'Reserved push entry; real execution is not enabled yet.') + '</span>' +
+        '<span class="ra-menu__desc">' + t('直接在当前项目目录执行 git push 并显示结果。', 'Run git push in the current project and show the result.') + '</span>' +
       '</span>' +
     '</button>';
   menu.onclick = (event) => {

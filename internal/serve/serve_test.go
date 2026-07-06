@@ -273,6 +273,78 @@ func TestServeRepoActionStatus(t *testing.T) {
 	}
 }
 
+func TestServeRepoActionPush(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found")
+	}
+
+	remote := t.TempDir()
+	runGitForTest(t, remote, "init", "--bare")
+
+	root := t.TempDir()
+	runGitForTest(t, root, "init")
+	runGitForTest(t, root, "config", "user.email", "reasonix@example.invalid")
+	runGitForTest(t, root, "config", "user.name", "Reasonix Test")
+	writeFileForTest(t, filepath.Join(root, "tracked.txt"), "one\n")
+	runGitForTest(t, root, "add", "tracked.txt")
+	runGitForTest(t, root, "commit", "-m", "initial")
+	runGitForTest(t, root, "branch", "-M", "main")
+	runGitForTest(t, root, "remote", "add", "origin", remote)
+	runGitForTest(t, root, "push", "-u", "origin", "main")
+	writeFileForTest(t, filepath.Join(root, "tracked.txt"), "changed\n")
+	runGitForTest(t, root, "add", "tracked.txt")
+	runGitForTest(t, root, "commit", "-m", "second")
+
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc, WorkspaceRoot: root})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/repo-action", "application/json", strings.NewReader(`{"action":"push"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("repo-action push status = %d, want 200: %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		Action   string `json:"action"`
+		RepoRoot string `json:"repoRoot"`
+		Branch   string `json:"branch"`
+		Output   string `json:"output"`
+		Error    string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode repo-action push: %v\n%s", err, string(body))
+	}
+	if out.Action != "push" {
+		t.Fatalf("action = %q, want push", out.Action)
+	}
+	if filepath.Clean(out.RepoRoot) != filepath.Clean(root) {
+		t.Fatalf("repoRoot = %q, want %q", out.RepoRoot, root)
+	}
+	if out.Branch != "main" {
+		t.Fatalf("branch = %q, want main", out.Branch)
+	}
+	if out.Error != "" {
+		t.Fatalf("error = %q, want empty", out.Error)
+	}
+	if !strings.Contains(out.Output, "main -> main") && !strings.Contains(out.Output, "main") {
+		t.Fatalf("output = %q, want push output", out.Output)
+	}
+
+	remoteMain := strings.TrimSpace(runGitOutputForTest(t, remote, "rev-parse", "refs/heads/main"))
+	localMain := strings.TrimSpace(runGitOutputForTest(t, root, "rev-parse", "HEAD"))
+	if remoteMain == "" || localMain == "" || remoteMain != localMain {
+		t.Fatalf("remote main = %q, local HEAD = %q, want equal", remoteMain, localMain)
+	}
+}
+
 func runGitForTest(t *testing.T, cwd string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -280,6 +352,17 @@ func runGitForTest(t *testing.T, cwd string, args ...string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
+}
+
+func runGitOutputForTest(t *testing.T, cwd string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = cwd
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return string(out)
 }
 
 func writeFileForTest(t *testing.T, path string, body string) {

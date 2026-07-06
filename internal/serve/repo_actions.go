@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,7 +13,10 @@ import (
 	"time"
 )
 
-const repoActionTimeout = 5 * time.Second
+const (
+	repoStatusTimeout = 5 * time.Second
+	repoPushTimeout   = 30 * time.Second
+)
 
 type repoActionResponse struct {
 	Action    string `json:"action"`
@@ -47,20 +51,67 @@ func (s *Server) repoAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, resp)
 	case "push":
-		writeJSON(w, repoActionResponse{
-			Action:    action,
-			Workspace: s.ctl().WorkspaceRoot(),
-			Error:     "git push is not enabled yet; use git status first and keep push in the agent flow for now",
-		})
+		resp, err := runRepoPush(r.Context(), s.ctl().WorkspaceRoot())
+		if err != nil {
+			writeJSON(w, resp)
+			return
+		}
+		writeJSON(w, resp)
 	default:
 		http.Error(w, "unsupported action", http.StatusBadRequest)
 	}
 }
 
 func runRepoStatus(parent context.Context, workspace string) (repoActionResponse, error) {
-	ctx, cancel := context.WithTimeout(parent, repoActionTimeout)
+	ctx, cancel := context.WithTimeout(parent, repoStatusTimeout)
 	defer cancel()
 
+	resp, err := resolveRepoContext(ctx, "status", workspace)
+	if err != nil {
+		return repoActionResponse{}, err
+	}
+
+	statusOut, err := runGitForRepoAction(ctx, resp.RepoRoot, "status", "--short", "--branch")
+	if err != nil {
+		return repoActionResponse{}, errors.New("failed to read git status")
+	}
+	resp.Output = strings.TrimRight(statusOut, "\n")
+	if resp.Output == "" {
+		resp.Output = "## " + filepath.Base(resp.RepoRoot)
+	}
+	return resp, nil
+}
+
+func runRepoPush(parent context.Context, workspace string) (repoActionResponse, error) {
+	ctx, cancel := context.WithTimeout(parent, repoPushTimeout)
+	defer cancel()
+
+	resp, err := resolveRepoContext(ctx, "push", workspace)
+	if err != nil {
+		return repoActionResponse{
+			Action:    "push",
+			Workspace: workspace,
+			Error:     err.Error(),
+		}, err
+	}
+
+	out, err := runGitForRepoAction(ctx, resp.RepoRoot, "push")
+	resp.Output = strings.TrimRight(out, "\n")
+	if err != nil {
+		if resp.Output == "" {
+			resp.Error = "git push failed"
+		} else {
+			resp.Error = fmt.Sprintf("git push failed: %s", firstLine(resp.Output))
+		}
+		return resp, err
+	}
+	if resp.Output == "" {
+		resp.Output = "git push completed"
+	}
+	return resp, nil
+}
+
+func resolveRepoContext(ctx context.Context, action string, workspace string) (repoActionResponse, error) {
 	root, err := runGitForRepoAction(ctx, workspace, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return repoActionResponse{}, errors.New("current project is not a git repository")
@@ -71,7 +122,7 @@ func runRepoStatus(parent context.Context, workspace string) (repoActionResponse
 	}
 
 	resp := repoActionResponse{
-		Action:    "status",
+		Action:    action,
 		Workspace: workspace,
 		RepoRoot:  root,
 	}
@@ -85,15 +136,6 @@ func runRepoStatus(parent context.Context, workspace string) (repoActionResponse
 		resp.Branch = "HEAD"
 		resp.Detached = true
 	}
-
-	statusOut, err := runGitForRepoAction(ctx, root, "status", "--short", "--branch")
-	if err != nil {
-		return repoActionResponse{}, errors.New("failed to read git status")
-	}
-	resp.Output = strings.TrimRight(statusOut, "\n")
-	if resp.Output == "" {
-		resp.Output = "## " + filepath.Base(root)
-	}
 	return resp, nil
 }
 
@@ -102,10 +144,21 @@ func runGitForRepoAction(ctx context.Context, cwd string, args ...string) (strin
 	if cwd != "" {
 		cmd.Dir = cwd
 	}
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(os.Environ(),
+		"GIT_OPTIONAL_LOCKS=0",
+		"GIT_TERMINAL_PROMPT=0",
+	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", err
+		return string(out), err
 	}
 	return string(out), nil
+}
+
+func firstLine(s string) string {
+	line := strings.TrimSpace(s)
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	return strings.TrimSpace(line)
 }
