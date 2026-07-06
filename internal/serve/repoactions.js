@@ -75,7 +75,7 @@ function ensureModal() {
     '<div class="ra-modal__card">' +
       '<div class="ra-modal__head">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5"/><path d="M12 19h8"/><path d="M12 5h8"/></svg>' +
-        '<span id="ra-modal-title">' + t('仓库操作', 'Repository Actions') + '</span>' +
+        '<span id="ra-modal-title">' + t('快捷指令', 'Quick Commands') + '</span>' +
         '<span class="ra-modal__close" id="ra-modal-close">&times;</span>' +
       '</div>' +
       '<div class="ra-modal__body" id="ra-modal-body"></div>' +
@@ -133,7 +133,7 @@ function runAction(kind) {
   }).then((result) => {
     renderResponse(result || {action: kind, error: t('空响应', 'Empty response')});
   }).catch((error) => {
-    renderResponse({action: kind, error: t('仓库操作失败：', 'Repository action failed: ') + error.message});
+    renderResponse({action: kind, error: t('快捷指令执行失败：', 'Quick command failed: ') + error.message});
   }).finally(() => {
     runningAction = false;
   });
@@ -147,7 +147,7 @@ function ensureMenu() {
   menu.id = 'ra-menu';
   menu.className = 'ra-menu';
   menu.innerHTML =
-    '<div class="ra-menu__head">' + t('仓库操作', 'Repository Actions') + '</div>' +
+    '<div class="ra-menu__head">' + t('快捷指令', 'Quick Commands') + '</div>' +
     '<button type="button" class="ra-menu__item" data-kind="status">' +
       '<svg class="ra-menu__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-8"/></svg>' +
       '<span class="ra-menu__body">' +
@@ -196,7 +196,7 @@ launch.className = 'footer-action ra-launch';
 launch.style.order = '30';
 launch.innerHTML =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5"/><path d="M12 19h8"/><path d="M12 5h8"/></svg>' +
-  '<span>' + t('仓库', 'Repo') + '</span>';
+  '<span>' + t('快捷指令', 'Quick Commands') + '</span>';
 launch.onclick = toggleMenu;
 
 if (actionHost) {
