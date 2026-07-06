@@ -60,7 +60,8 @@ type Server struct {
 	// window, another CLI). Wired by the serve CLI command with the keeper that
 	// already holds the startup session's lease; nil (tests, embedded use)
 	// disables lease gating.
-	leases *control.SessionLeaseKeeper
+	leases              *control.SessionLeaseKeeper
+	interactiveApproval bool
 }
 
 // New builds a Server. bc must be the controller's event sink.
@@ -73,6 +74,7 @@ func New(ctrl control.SessionAPI, bc *Broadcaster, serveCfg config.ServeConfig) 
 		auth:   newAuthGate(serveCfg),
 	}
 	s.initTitleProvider()
+	rememberWorkspace(ctrl.WorkspaceRoot())
 	return s
 }
 
@@ -204,6 +206,7 @@ func (s *Server) switchModel(ctx context.Context, ref string) error {
 		newCtrl.Close()
 		return fmt.Errorf("switch model: session changed during switch")
 	}
+	s.prepareReplacementController(cur, newCtrl)
 	s.ctrl = newCtrl
 	s.mu.Unlock()
 
@@ -341,6 +344,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /skills", s.skills)
 	mux.HandleFunc("GET /todos", s.todos)
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
+	mux.HandleFunc("GET /workspaces", s.workspaces)
+	mux.HandleFunc("POST /switch-project", s.switchProjectHandler)
 	return logMiddleware(s.auth.middleware(csrfGuard(mux)))
 }
 
@@ -370,7 +375,7 @@ func csrfGuard(next http.Handler) http.Handler {
 // Run serves until the process is killed. Interactive approval is enabled so
 // "ask" decisions surface as approval_request events answered via POST /approve.
 func (s *Server) Run(addr string) error {
-	s.ctl().EnableInteractiveApproval()
+	s.enableInteractiveApproval()
 	return http.ListenAndServe(addr, s.Handler())
 }
 
@@ -378,7 +383,7 @@ func (s *Server) Run(addr string) error {
 // the provided context and drains active connections for up to 10 seconds
 // before returning.
 func (s *Server) RunGraceful(ctx context.Context, addr string) error {
-	s.ctl().EnableInteractiveApproval()
+	s.enableInteractiveApproval()
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           s.Handler(),
