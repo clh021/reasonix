@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -182,6 +183,109 @@ func TestServeProjectTrackerScriptEndpoint(t *testing.T) {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("projecttracker.js missing %q", want)
 		}
+	}
+}
+
+func TestServeRepoActionsScriptEndpoint(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/repoactions.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("repoactions.js status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
+		t.Fatalf("repoactions.js content-type = %q, want application/javascript", ct)
+	}
+	for _, want := range []string{"function runAction(kind)", "fetch('/repo-action'", "Git Status", "Git Push"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("repoactions.js missing %q", want)
+		}
+	}
+}
+
+func TestServeRepoActionStatus(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found")
+	}
+
+	root := t.TempDir()
+	runGitForTest(t, root, "init")
+	runGitForTest(t, root, "config", "user.email", "reasonix@example.invalid")
+	runGitForTest(t, root, "config", "user.name", "Reasonix Test")
+	writeFileForTest(t, filepath.Join(root, "tracked.txt"), "one\n")
+	runGitForTest(t, root, "add", "tracked.txt")
+	runGitForTest(t, root, "commit", "-m", "initial")
+	runGitForTest(t, root, "branch", "-M", "main")
+	writeFileForTest(t, filepath.Join(root, "tracked.txt"), "changed\n")
+
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc, WorkspaceRoot: root})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/repo-action", "application/json", strings.NewReader(`{"action":"status"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("repo-action status = %d, want 200: %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		Action   string `json:"action"`
+		RepoRoot string `json:"repoRoot"`
+		Branch   string `json:"branch"`
+		Output   string `json:"output"`
+		Error    string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode repo-action: %v\n%s", err, string(body))
+	}
+	if out.Action != "status" {
+		t.Fatalf("action = %q, want status", out.Action)
+	}
+	if filepath.Clean(out.RepoRoot) != filepath.Clean(root) {
+		t.Fatalf("repoRoot = %q, want %q", out.RepoRoot, root)
+	}
+	if out.Branch != "main" {
+		t.Fatalf("branch = %q, want main", out.Branch)
+	}
+	if out.Error != "" {
+		t.Fatalf("error = %q, want empty", out.Error)
+	}
+	if !strings.Contains(out.Output, "## main") || !strings.Contains(out.Output, " M tracked.txt") {
+		t.Fatalf("output = %q, want git status output", out.Output)
+	}
+}
+
+func runGitForTest(t *testing.T, cwd string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = cwd
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+func writeFileForTest(t *testing.T, path string, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -594,6 +698,9 @@ func TestServeIndexIncludesQuickReplyScript(t *testing.T) {
 	}
 	if !strings.Contains(html, `<script src="/projecttracker.js"></script>`) {
 		t.Fatalf("serve index missing project tracker script tag:\n%s", html)
+	}
+	if !strings.Contains(html, `<script src="/repoactions.js"></script>`) {
+		t.Fatalf("serve index missing repo actions script tag:\n%s", html)
 	}
 }
 

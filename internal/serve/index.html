@@ -234,10 +234,11 @@ input,textarea{font:inherit;color:inherit}
 .status__dot{width:5px;height:5px;border-radius:50%;background:var(--muted-2);flex-shrink:0}
 .status__dot--busy{background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.35}}
-.footer-actions{display:flex;align-items:center;gap:8px;min-width:0;overflow-x:auto;padding:2px 0;scrollbar-width:none}
+.footer-actions{display:flex;align-items:center;gap:5px;min-width:0;overflow-x:auto;padding:0;scrollbar-width:none}
 .footer-actions::-webkit-scrollbar{display:none}
-.footer-action{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg-2);color:var(--fg-2);font-size:12px;cursor:pointer;transition:all .15s ease;white-space:nowrap;flex:0 0 auto}
+.footer-action{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg-2);color:var(--muted);font-size:11.5px;cursor:pointer;transition:all .18s ease;white-space:nowrap;flex:0 0 auto}
 .footer-action:hover{background:var(--panel);color:var(--fg);border-color:var(--border-strong)}
+.footer-action svg{width:12px;height:12px;flex-shrink:0}
 
 /* welcome */
 .welcome{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative}
@@ -288,7 +289,7 @@ input,textarea{font:inherit;color:inherit}
   .menu-btn svg{width:16px;height:16px}
   .footer{padding:10px 16px 12px}
   .transcript{padding:16px}
-  .footer-actions{gap:6px}
+  .footer-actions{gap:5px}
 }
 @media(min-width:769px){
   .menu-btn,.sidebar-overlay{display:none}
@@ -1551,5 +1552,6 @@ fetchStatus();
 </script>
 <script src="/quickreply.js"></script>
 <script src="/projecttracker.js"></script>
+<script src="/repoactions.js"></script>
 </body>
 </html>

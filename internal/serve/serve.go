@@ -42,6 +42,9 @@ var quickReplyJS []byte
 //go:embed projecttracker.js
 var projectTrackerJS []byte
 
+//go:embed repoactions.js
+var repoActionsJS []byte
+
 // Server wires a controller to its HTTP surface. The Broadcaster must be the
 // same sink the controller was constructed with, so events reach SSE clients.
 type Server struct {
@@ -359,8 +362,10 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /quick-replies", s.quickReplies)
 	mux.HandleFunc("POST /quick-replies", s.quickReplies)
 	mux.HandleFunc("GET /projecttracker.js", s.projectTrackerScript)
+	mux.HandleFunc("GET /repoactions.js", s.repoActionsScript)
 	mux.HandleFunc("GET /project-features", s.projectFeatures)
 	mux.HandleFunc("POST /project-features", s.projectFeatures)
+	mux.HandleFunc("POST /repo-action", s.repoAction)
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
 	mux.HandleFunc("GET /workspaces", s.workspaces)
 	mux.HandleFunc("POST /switch-project", s.switchProjectHandler)
@@ -448,6 +453,11 @@ func (s *Server) quickReplyScript(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) projectTrackerScript(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	_, _ = w.Write(projectTrackerJS)
+}
+
+func (s *Server) repoActionsScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	_, _ = w.Write(repoActionsJS)
 }
 
 // sseKeepaliveInterval is how often the /events handler emits a `: ping`
