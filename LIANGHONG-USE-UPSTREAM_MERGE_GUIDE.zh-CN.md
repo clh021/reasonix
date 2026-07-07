@@ -473,8 +473,9 @@ git diff --stat origin/main-v2..lianghong-use
 | --- | --- | --- | --- | --- |
 | `当前自维护` | `serve` 项目切换 | Web `serve` 界面支持切换当前项目目录 | `internal/serve/project_switch.go` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则删除我们的切换实现 |
 | `当前自维护` | workspace 列表持久化 | 记住并恢复 `serve` 端最近使用的项目列表 | `internal/serve/workspace.go` `internal/serve/workspace_test.go` `internal/serve/project_switch.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则删除我们的持久化实现 |
-| `当前自维护` | Web UI 快捷回复 | 快捷回复列表、管理弹窗、插入输入框、前端自动发送偏好 | `internal/quickreply/types.go` `internal/quickreply/quickreply.go` `internal/quickreply/quickreply_test.go` `internal/serve/quickreply.js` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则优先采用上游并删除我们的版本 |
+| `当前自维护` | Web UI 快捷回复 | 快捷回复列表、分类 Tab、管理弹窗、插入输入框、前端自动发送偏好 | `internal/quickreply/types.go` `internal/quickreply/quickreply.go` `internal/quickreply/quickreply_test.go` `internal/serve/quickreply.js` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则优先采用上游并删除我们的版本 |
 | `当前自维护` | 项目特性追踪列表 | 按当前项目维护 wishlist / 当前自维护 / 已被上游覆盖等特性条目 | `internal/projecttracker/types.go` `internal/projecttracker/store.go` `internal/projecttracker/store_test.go` `internal/serve/projecttracker.js` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` `docs/PROJECT_FEATURE_TRACKER_DESIGN.zh-CN.md` `docs/templates/project-tracker/README.md` | 上游若无等价实现，则继续重放；若已覆盖，则迁移到上游实现并删除本地代码 |
+| `当前自维护` | `Quick Commands` / 仓库操作 | Web `serve` 底部操作栏提供 git status / git push 的快捷入口与结果弹窗 | `internal/serve/repo_actions.go` `internal/serve/repoactions.js` `internal/serve/serve.go` `internal/serve/serve_test.go` `internal/serve/index.html` | 上游若无等价实现，则继续重放；若已覆盖，则删除我们的快捷入口与路由接线 |
 | `当前自维护` | 桌面端 transcript 收尾补滚动 | streaming 结束后继续把 transcript 视图钉到底部 | `desktop/frontend/src/components/Transcript.tsx` | 若上游仍无此修复则保留；若上游已修复则删除我们的补丁 |
 | `当前自维护` | `serve` 会话列表裁切样式修复 | 移除 `.session-item` 的 `overflow: hidden`，避免会话列表内容被裁切 | `internal/serve/index.html` | 每次同步后复查上游样式；若上游仍保留该属性，则重新移除 |
 
@@ -543,3 +544,27 @@ git diff --stat origin/main-v2..lianghong-use
 - **改动**: 去掉 `overflow: hidden`
 - **原因**: 该属性导致 serve web 界面的会话列表显示异常（列表项内容被裁切，无法正常展示完整信息）。
 - **合并注意事项**: 上游 `main-v2` 合并进来时，如果上游恢复了 `overflow: hidden`，需重新移除。
+
+### `.app` 增加 `100dvh` 与 `visualViewport` 高度同步
+
+- **文件**: `internal/serve/index.html`（第 42 行、第 1553 行附近）
+- **改动**:
+  - `.app` 从 `height: 100vh` 扩为 `height: 100vh; height: 100dvh`
+  - 追加 `visualViewport.resize` 监听，在移动端软键盘弹出/收起时同步 `.app` 高度
+- **原因**: 解决移动端浏览器地址栏与软键盘导致的可视区域变化，尽量保持输入区可见。
+- **合并注意事项**: 若上游后续正式实现了移动端键盘适配，优先采用上游版本并删除本补丁。
+
+### `.composer__input` 去掉 `field-sizing: content`
+
+- **文件**: `internal/serve/index.html`（第 183 行附近）
+- **原始 CSS**: `.composer__input { ... field-sizing: content }`
+- **改动**: 去掉 `field-sizing: content`
+- **原因**: 收敛浏览器兼容性差异，避免输入框高度/布局行为依赖实验性实现。
+- **合并注意事项**: 若上游重新引入该属性，需要结合实际浏览器兼容性重新评估，不应无条件保留。
+
+### `resetConversationView()` 显式重置 transcript 滚动位置
+
+- **文件**: `internal/serve/index.html`（第 827 行附近）
+- **改动**: 在清空 `log.innerHTML` 后追加 `log.scrollTop = 0`
+- **原因**: 会话切换或新建对话时，避免沿用旧滚动偏移导致欢迎页或新 transcript 起始位置异常。
+- **合并注意事项**: 若上游重构 transcript reset 逻辑，需要确认仍保留“重置滚动位置”这一行为结果。
