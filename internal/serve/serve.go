@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -85,7 +86,7 @@ func New(ctrl control.SessionAPI, bc *Broadcaster, serveCfg config.ServeConfig) 
 		bc:     bc,
 		titles: newTitleCache(ctrl.SessionDir()),
 		auth:   newAuthGate(serveCfg),
-		qr:     quickreply.NewManager(quickreply.DefaultPath(config.ReasonixHomeDir())),
+		qr:     quickreply.NewManager(quickreply.DefaultPath(config.ReasonixHomeDir()), quickreply.DefaultProjectPath(config.ReasonixHomeDir())),
 		pt:     projecttracker.NewStore(projecttracker.DefaultPath(config.ReasonixHomeDir())),
 	}
 	s.initTitleProvider()
@@ -1329,23 +1330,62 @@ func (s *Server) todos(w http.ResponseWriter, _ *http.Request) {
 
 // quickReplies returns (GET) or saves (POST) the user-configured quick-reply templates.
 func (s *Server) quickReplies(w http.ResponseWriter, r *http.Request) {
+	workspaceRoot := s.ctl().WorkspaceRoot()
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.qr.Load())
-	case http.MethodPost:
-		var replies []quickreply.QuickReply
-		if err := json.NewDecoder(r.Body).Decode(&replies); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
-			return
-		}
-		if err := s.qr.Save(replies); err != nil {
+		snap, err := s.qr.Load(workspaceRoot)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, s.qr.Load())
+		writeJSON(w, snap)
+	case http.MethodPost:
+		body, err := decodeQuickRepliesRequest(r.Body)
+		if err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		snap, err := s.qr.Save(workspaceRoot, body.ProjectRoot, body.Replies)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, quickreply.ErrWorkspaceNotConfigured) {
+				status = http.StatusBadRequest
+			} else if errors.Is(err, quickreply.ErrProjectContextChanged) {
+				status = http.StatusConflict
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+		writeJSON(w, snap)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func decodeQuickRepliesRequest(body io.Reader) (struct {
+	ProjectRoot string                  `json:"projectRoot"`
+	Replies     []quickreply.QuickReply `json:"replies"`
+}, error) {
+	var req struct {
+		ProjectRoot string                  `json:"projectRoot"`
+		Replies     []quickreply.QuickReply `json:"replies"`
+	}
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return req, err
+	}
+	if len(data) == 0 {
+		return req, io.EOF
+	}
+	if err := json.Unmarshal(data, &req); err == nil && req.Replies != nil {
+		return req, nil
+	}
+	var replies []quickreply.QuickReply
+	if err := json.Unmarshal(data, &replies); err != nil {
+		return req, err
+	}
+	req.Replies = replies
+	return req, nil
 }
 
 // quickReplyCategories returns the list of predefined quick-reply categories.

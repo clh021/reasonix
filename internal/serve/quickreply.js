@@ -14,19 +14,21 @@ style.textContent =
 .qr-toolbar__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .qr-toggle{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--fg-2)}
 .qr-toggle input{width:auto}
-.qr-tabs{display:flex;gap:2px;padding:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-.qr-tabs::-webkit-scrollbar{display:none}
-.qr-tab{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:500;color:var(--fg-2);cursor:pointer;white-space:nowrap;border:none;background:none;transition:background .15s,color .15s}
-.qr-tab:hover{background:var(--panel);color:var(--fg)}
-.qr-tab--active{background:var(--accent-soft);color:var(--accent)}
-.qr-tab__badge{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:600;background:var(--panel-2);color:var(--muted)}
-.qr-tab--active .qr-tab__badge{background:var(--accent);color:#fff}
+.qr-context{font-size:12px;color:var(--muted)}
+.qr-scopes,.qr-tabs{display:flex;gap:2px;padding:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.qr-scopes::-webkit-scrollbar,.qr-tabs::-webkit-scrollbar{display:none}
+.qr-scope,.qr-tab{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:500;color:var(--fg-2);cursor:pointer;white-space:nowrap;border:none;background:none;transition:background .15s,color .15s}
+.qr-scope:hover,.qr-tab:hover{background:var(--panel);color:var(--fg)}
+.qr-scope--active,.qr-tab--active{background:var(--accent-soft);color:var(--accent)}
+.qr-scope__badge,.qr-tab__badge{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:600;background:var(--panel-2);color:var(--muted)}
+.qr-scope--active .qr-scope__badge,.qr-tab--active .qr-tab__badge{background:var(--accent);color:#fff}
 .qr-list{display:flex;flex:1;flex-direction:column;gap:8px;min-height:0;overflow-y:auto;padding-right:4px}
 .qr-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-2)}
 .qr-item__main{min-width:0}
 .qr-item__pick{display:block;width:100%;padding:0;border:none;background:none;text-align:left;cursor:pointer}
 .qr-item__pick:hover .qr-item__name{color:var(--accent)}
-.qr-item__name{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:4px;transition:color .15s ease}
+.qr-item__name{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;font-weight:600;color:var(--fg);margin-bottom:4px;transition:color .15s ease}
+.qr-item__scope{display:inline-flex;align-items:center;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;background:var(--panel);color:var(--fg-2)}
 .qr-item__body{font-size:12px;line-height:1.5;color:var(--fg-2);white-space:pre-wrap;word-break:break-word}
 .qr-item__ops{display:flex;gap:6px;flex-shrink:0}
 .qr-op{padding:5px 9px;border-radius:7px;border:1px solid var(--border);background:var(--panel);color:var(--fg-2);font-size:12px;cursor:pointer}
@@ -65,6 +67,8 @@ let categories = [];
 let editingIndex = -1;
 let saving = false;
 let loadingReplies = false;
+let currentProject = { id: '', name: '', root: '' };
+let activeScope = 'all'; // all | public | project
 let activeCategory = ''; // '' = show all
 
 function escapeHTML(value) {
@@ -80,8 +84,32 @@ function cloneReplies(replies) {
   return (replies || []).map((reply) => ({
     name: reply.name || '',
     body: reply.body || '',
-    category: reply.category || ''
+    category: reply.category || '',
+    scope: reply.scope === 'project' ? 'project' : 'public'
   }));
+}
+
+function hasCurrentProject() {
+  return Boolean(currentProject && currentProject.root);
+}
+
+function projectLabel() {
+  if (currentProject && currentProject.name) {
+    return currentProject.name;
+  }
+  if (currentProject && currentProject.root) {
+    return currentProject.root;
+  }
+  return t('当前项目', 'Current Project');
+}
+
+function scopeLabel(scope) {
+  if (scope === 'project') {
+    return hasCurrentProject()
+      ? t('项目: ' + projectLabel(), 'Project: ' + projectLabel())
+      : t('当前项目', 'Current Project');
+  }
+  return t('公共', 'Public');
 }
 
 function autoSendEnabled() {
@@ -161,6 +189,10 @@ function showEditor(index) {
   if (!editor || !title || !name || !body || !catSelect) {
     return;
   }
+  const scopeSelect = document.getElementById('qr-scope');
+  if (!scopeSelect) {
+    return;
+  }
 
   // Build category dropdown options from loaded categories
   catSelect.innerHTML = '';
@@ -175,40 +207,97 @@ function showEditor(index) {
     catSelect.appendChild(opt);
   });
 
+  scopeSelect.innerHTML = '';
+  const publicOpt = document.createElement('option');
+  publicOpt.value = 'public';
+  publicOpt.textContent = t('公共回复', 'Public Reply');
+  scopeSelect.appendChild(publicOpt);
+  if (hasCurrentProject()) {
+    const projectOpt = document.createElement('option');
+    projectOpt.value = 'project';
+    projectOpt.textContent = t('当前项目回复（' + projectLabel() + '）', 'Current Project Reply (' + projectLabel() + ')');
+    scopeSelect.appendChild(projectOpt);
+  }
+
   if (editingIndex >= 0) {
     const reply = qrReplies[editingIndex];
     title.textContent = t('编辑快捷回复', 'Edit Quick Reply');
     name.value = reply ? reply.name : '';
     body.value = reply ? reply.body : '';
     catSelect.value = reply ? (reply.category || '') : '';
+    scopeSelect.value = reply && reply.scope === 'project' && hasCurrentProject() ? 'project' : 'public';
   } else {
     title.textContent = t('新增快捷回复', 'Add Quick Reply');
     name.value = '';
     body.value = '';
     // Default to the currently active category when adding a new reply
     catSelect.value = activeCategory || '';
+    scopeSelect.value = activeScope === 'project' && hasCurrentProject() ? 'project' : 'public';
   }
   setError('');
   editor.classList.add('qr-editor--open');
   name.focus();
 }
 
+function renderContext() {
+  const context = document.getElementById('qr-context');
+  if (!context) return;
+  context.textContent = hasCurrentProject()
+    ? t('当前项目：' + projectLabel(), 'Current project: ' + projectLabel())
+    : t('未绑定项目，仅显示公共快捷回复。', 'No project selected. Only public quick replies are available.');
+}
+
+function renderScopeTabs() {
+  const tabs = document.getElementById('qr-scopes');
+  if (!tabs) return;
+  tabs.innerHTML = '';
+
+  const counts = {
+    all: qrReplies.length,
+    public: qrReplies.filter((reply) => reply.scope !== 'project').length,
+    project: qrReplies.filter((reply) => reply.scope === 'project').length
+  };
+  const items = [
+    { id: 'all', label: t('全部', 'All') },
+    { id: 'public', label: t('公共', 'Public') }
+  ];
+  if (hasCurrentProject()) {
+    items.push({ id: 'project', label: t('当前项目', 'Current Project') });
+  } else if (activeScope === 'project') {
+    activeScope = 'all';
+  }
+
+  items.forEach((item) => {
+    const tab = document.createElement('button');
+    tab.className = 'qr-scope' + (activeScope === item.id ? ' qr-scope--active' : '');
+    tab.type = 'button';
+    tab.dataset.scope = item.id;
+    tab.innerHTML = escapeHTML(item.label) + ' <span class="qr-scope__badge">' + counts[item.id] + '</span>';
+    tabs.appendChild(tab);
+  });
+}
+
 function renderCategoryTabs() {
   const tabs = document.getElementById('qr-tabs');
   if (!tabs) return;
   tabs.innerHTML = '';
+  const scopedReplies = qrReplies.filter((reply) => {
+    if (activeScope === 'project') return reply.scope === 'project';
+    if (activeScope === 'public') return reply.scope !== 'project';
+    return true;
+  });
 
   // "All" tab — always first
   const allTab = document.createElement('button');
   allTab.className = 'qr-tab' + (activeCategory === '' ? ' qr-tab--active' : '');
   allTab.type = 'button';
   allTab.dataset.category = '';
-  allTab.innerHTML = t('全部', 'All') + ' <span class="qr-tab__badge">' + qrReplies.length + '</span>';
+  allTab.innerHTML = t('全部', 'All') + ' <span class="qr-tab__badge">' + scopedReplies.length + '</span>';
   tabs.appendChild(allTab);
 
   // One tab per category
   categories.forEach((cat) => {
-    const count = qrReplies.filter((r) => r.category === cat.id).length;
+    const count = scopedReplies.filter((r) => r.category === cat.id).length;
     const tab = document.createElement('button');
     tab.className = 'qr-tab' + (activeCategory === cat.id ? ' qr-tab--active' : '');
     tab.type = 'button';
@@ -235,6 +324,11 @@ function renderList() {
   // Map with original index so edit/delete still refer to the correct item
   const indexed = qrReplies.map((reply, idx) => ({ reply, idx }));
   let filtered = indexed;
+  if (activeScope === 'project') {
+    filtered = filtered.filter((item) => item.reply.scope === 'project');
+  } else if (activeScope === 'public') {
+    filtered = filtered.filter((item) => item.reply.scope !== 'project');
+  }
   if (activeCategory) {
     filtered = filtered.filter((item) => item.reply.category === activeCategory);
   }
@@ -255,7 +349,7 @@ function renderList() {
     row.innerHTML =
       '<div class="qr-item__main">' +
         '<button type="button" class="qr-item__pick" data-action="pick" data-index="' + idx + '">' +
-          '<div class="qr-item__name">' + escapeHTML(reply.name) + '</div>' +
+          '<div class="qr-item__name"><span>' + escapeHTML(reply.name) + '</span><span class="qr-item__scope">' + escapeHTML(scopeLabel(reply.scope)) + '</span></div>' +
           '<div class="qr-item__body">' + escapeHTML(reply.body) + '</div>' +
         '</button>' +
       '</div>' +
@@ -277,20 +371,36 @@ function persistReplies(nextReplies, onSuccess) {
   fetch('/quick-replies', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(nextReplies)
+    body: JSON.stringify({
+      projectRoot: currentProject && currentProject.root ? currentProject.root : '',
+      replies: nextReplies
+    })
   }).then((response) => {
     if (!response.ok) {
-      throw new Error('save failed');
+      return response.text().then((message) => {
+        const error = new Error(message || 'save failed');
+        error.status = response.status;
+        throw error;
+      });
     }
     return response.json();
-  }).then((savedReplies) => {
-    qrReplies = cloneReplies(Array.isArray(savedReplies) ? savedReplies : []);
+  }).then((payload) => {
+    currentProject = payload && payload.project ? payload.project : { id: '', name: '', root: '' };
+    qrReplies = cloneReplies(payload && Array.isArray(payload.replies) ? payload.replies : []);
+    renderContext();
+    renderScopeTabs();
     renderCategoryTabs();
     renderList();
     if (typeof onSuccess === 'function') {
       onSuccess();
     }
   }).catch((error) => {
+    if (error && error.status === 409) {
+      closeModal();
+      void loadReplies();
+      window.alert(t('当前项目已切换，请重新打开快捷回复后再保存。', 'The current project changed. Reopen Quick Replies and try again.'));
+      return;
+    }
     setError(t('保存失败：' + error.message, 'Save failed: ' + error.message));
   }).finally(() => {
     saving = false;
@@ -302,18 +412,24 @@ function saveReply() {
   const nameField = document.getElementById('qr-name');
   const bodyField = document.getElementById('qr-body');
   const catField = document.getElementById('qr-category');
-  if (!nameField || !bodyField || !catField) {
+  const scopeField = document.getElementById('qr-scope');
+  if (!nameField || !bodyField || !catField || !scopeField) {
     return;
   }
   const name = nameField.value.trim();
   const body = bodyField.value.trim();
   const category = catField.value || '';
+  const scope = scopeField.value === 'project' ? 'project' : 'public';
   if (!name || !body) {
     setError(t('名称和内容都不能为空', 'Name and message are required'));
     return;
   }
+  if (scope === 'project' && !hasCurrentProject()) {
+    setError(t('当前没有可绑定的项目，不能保存项目快捷回复', 'No current project is available for project-scoped replies'));
+    return;
+  }
   const nextReplies = cloneReplies(qrReplies);
-  const reply = { name, body, category };
+  const reply = { name, body, category, scope };
   if (editingIndex >= 0) {
     nextReplies[editingIndex] = reply;
   } else {
@@ -400,11 +516,14 @@ function ensureModal() {
         '</div>' +
         '<label class="qr-toggle"><input type="checkbox" id="qr-auto-send" />' + t('点击后自动发送', 'Auto-send after insert') + '</label>' +
       '</div>' +
+      '<div class="qr-context" id="qr-context"></div>' +
+      '<div class="qr-scopes" id="qr-scopes"></div>' +
       '<div class="qr-tabs" id="qr-tabs"></div>' +
       '<div class="qr-list" id="qr-list"></div>' +
       '<div class="qr-editor" id="qr-editor">' +
         '<div class="qr-editor__title" id="qr-editor-title"></div>' +
         '<div class="qr-form-row"><label>' + t('名称', 'Name') + '</label><input id="qr-name" /></div>' +
+        '<div class="qr-form-row"><label>' + t('作用域', 'Scope') + '</label><select id="qr-scope"></select></div>' +
         '<div class="qr-form-row"><label>' + t('分类', 'Category') + '</label><select id="qr-category"></select></div>' +
         '<div class="qr-form-row"><label>' + t('消息内容', 'Message') + '</label><textarea id="qr-body"></textarea></div>' +
         '<div class="qr-error" id="qr-error"></div>' +
@@ -431,6 +550,14 @@ function ensureModal() {
   document.getElementById('qr-list').onclick = handleListClick;
   document.getElementById('qr-auto-send').onchange = (event) => {
     setAutoSendEnabled(Boolean(event.target.checked));
+  };
+  document.getElementById('qr-scopes').onclick = (event) => {
+    const tab = event.target.closest('.qr-scope');
+    if (!tab) return;
+    activeScope = tab.dataset.scope || 'all';
+    renderScopeTabs();
+    renderCategoryTabs();
+    renderList();
   };
   document.getElementById('qr-tabs').onclick = (event) => {
     const tab = event.target.closest('.qr-tab');
@@ -462,6 +589,8 @@ function openComposerPicker() {
 function loadReplies() {
   loadingReplies = true;
   syncReplyControls();
+  renderContext();
+  renderScopeTabs();
   renderCategoryTabs();
   renderList();
   return fetch('/quick-replies')
@@ -471,15 +600,19 @@ function loadReplies() {
       }
       return response.json();
     })
-    .then((replies) => {
-      qrReplies = cloneReplies(Array.isArray(replies) ? replies : []);
+    .then((payload) => {
+      currentProject = payload && payload.project ? payload.project : { id: '', name: '', root: '' };
+      qrReplies = cloneReplies(payload && Array.isArray(payload.replies) ? payload.replies : []);
     })
     .catch(() => {
+      currentProject = { id: '', name: '', root: '' };
       qrReplies = [];
     })
     .finally(() => {
       loadingReplies = false;
       syncReplyControls();
+      renderContext();
+      renderScopeTabs();
       renderCategoryTabs();
       renderList();
     });

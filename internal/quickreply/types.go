@@ -16,6 +16,23 @@ type QuickReply struct {
 	// Category is the predefined category ID this reply belongs to.
 	// Use one of the PredefinedCategories IDs, or empty for uncategorized.
 	Category string `json:"category,omitempty" toml:"category,omitempty"`
+
+	// Scope controls whether this reply is shared globally or only for the
+	// current project.
+	Scope string `json:"scope,omitempty" toml:"scope,omitempty"`
+}
+
+const (
+	ScopePublic  = "public"
+	ScopeProject = "project"
+)
+
+// Project identifies the current project as resolved for project-scoped replies.
+type Project struct {
+	ID      string `json:"id" toml:"id"`
+	Name    string `json:"name" toml:"name"`
+	Root    string `json:"root" toml:"root"`
+	BaseDir string `json:"baseDir,omitempty" toml:"base_dir,omitempty"`
 }
 
 // PredefinedCategory describes one category in the quick-reply classification system.
@@ -55,4 +72,14 @@ func ValidCategoryID(id string) bool {
 // store is the on-disk structure serialised as TOML.
 type store struct {
 	QuickReplies []QuickReply `toml:"quick_replies"`
+}
+
+type configFile struct {
+	BaseDirs []string `toml:"base_dirs"`
+}
+
+// Snapshot is the JSON payload served to the web UI.
+type Snapshot struct {
+	Project Project      `json:"project"`
+	Replies []QuickReply `json:"replies"`
 }

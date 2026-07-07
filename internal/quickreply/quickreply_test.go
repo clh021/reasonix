@@ -1,6 +1,7 @@
 package quickreply
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,35 +9,42 @@ import (
 )
 
 func TestManagerLoadMissingFileReturnsEmptySlice(t *testing.T) {
-	m := NewManager(filepath.Join(t.TempDir(), "quick-replies.toml"))
-	got := m.Load()
-	if got == nil {
+	m := NewManager(filepath.Join(t.TempDir(), "quick-replies.toml"), filepath.Join(t.TempDir(), "project-quick-replies"))
+	got, err := m.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Replies == nil {
 		t.Fatal("Load returned nil slice")
 	}
-	if len(got) != 0 {
-		t.Fatalf("Load length = %d, want 0", len(got))
+	if len(got.Replies) != 0 {
+		t.Fatalf("Load length = %d, want 0", len(got.Replies))
 	}
 }
 
-func TestManagerSaveLoadRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "quick-replies.toml")
-	m := NewManager(path)
+func TestManagerSaveLoadRoundTripPublicOnly(t *testing.T) {
+	home := t.TempDir()
+	m := NewManager(filepath.Join(home, "quick-replies.toml"), filepath.Join(home, "project-quick-replies"))
 	want := []QuickReply{
-		{Name: "Ack", Body: "On it"},
-		{Name: "Draft", Body: "Let me think"},
+		{Name: "Ack", Body: "On it", Scope: ScopePublic},
+		{Name: "Draft", Body: "Let me think", Scope: ScopePublic},
 	}
 
-	if err := m.Save(want); err != nil {
+	if _, err := m.Save("", "", want); err != nil {
 		t.Fatal(err)
 	}
-	got := m.Load()
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Load = %#v, want %#v", got, want)
+	got, err := m.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Replies, want) {
+		t.Fatalf("Load = %#v, want %#v", got.Replies, want)
 	}
 }
 
 func TestManagerLoadMigratesLegacyFieldsByIgnoringThem(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "quick-replies.toml")
+	home := t.TempDir()
+	path := filepath.Join(home, "quick-replies.toml")
 	if err := os.WriteFile(path, []byte(`
 [[quick_replies]]
 name = "Ack"
@@ -47,11 +55,14 @@ icon = "+"
 		t.Fatal(err)
 	}
 
-	m := NewManager(path)
-	got := m.Load()
-	want := []QuickReply{{Name: "Ack", Body: "On it"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Load = %#v, want %#v", got, want)
+	m := NewManager(path, filepath.Join(home, "project-quick-replies"))
+	got, err := m.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []QuickReply{{Name: "Ack", Body: "On it", Scope: ScopePublic}}
+	if !reflect.DeepEqual(got.Replies, want) {
+		t.Fatalf("Load = %#v, want %#v", got.Replies, want)
 	}
 }
 
@@ -60,6 +71,14 @@ func TestDefaultPath(t *testing.T) {
 	want := filepath.Join("/tmp/reasonix", "quick-replies.toml")
 	if got != want {
 		t.Fatalf("DefaultPath = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultProjectPath(t *testing.T) {
+	got := DefaultProjectPath("/tmp/reasonix")
+	want := filepath.Join("/tmp/reasonix", "project-quick-replies")
+	if got != want {
+		t.Fatalf("DefaultProjectPath = %q, want %q", got, want)
 	}
 }
 
@@ -110,47 +129,240 @@ func TestValidCategoryID(t *testing.T) {
 	}
 }
 
-func TestManagerSaveLoadRoundTripWithCategories(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "quick-replies.toml")
-	m := NewManager(path)
-	want := []QuickReply{
-		{Name: "Req check", Body: "Have we confirmed requirements?", Category: "requirements"},
-		{Name: "Bug bash", Body: "Let's do a bug bash", Category: "testing"},
-		{Name: "No category", Body: "General note"},
-	}
-
-	if err := m.Save(want); err != nil {
+func TestManagerSaveLoadRoundTripWithCategoriesAndScopes(t *testing.T) {
+	home := t.TempDir()
+	workspaceRoot := filepath.Join(home, "Projects", "reasonix")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got := m.Load()
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Load = %#v, want %#v", got, want)
+	projectRoot := filepath.Join(home, "project-quick-replies")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "config.toml"), []byte(`base_dirs = ["`+filepath.ToSlash(filepath.Join(home, "Projects"))+`"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(filepath.Join(home, "quick-replies.toml"), projectRoot)
+	want := []QuickReply{
+		{Name: "Req check", Body: "Have we confirmed requirements?", Category: "requirements", Scope: ScopePublic},
+		{Name: "Bug bash", Body: "Let's do a bug bash", Category: "testing", Scope: ScopeProject},
+		{Name: "No category", Body: "General note", Scope: ScopeProject},
+	}
+
+	if _, err := m.Save(workspaceRoot, workspaceRoot, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.Load(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Replies, want) {
+		t.Fatalf("Load = %#v, want %#v", got.Replies, want)
+	}
+	if got.Project.ID != "reasonix" {
+		t.Fatalf("Project.ID = %q, want reasonix", got.Project.ID)
 	}
 }
 
-func TestSanitizeRejectsInvalidCategory(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "quick-replies.toml")
-	m := NewManager(path)
+func TestSanitizeRejectsInvalidCategoryAndScope(t *testing.T) {
+	home := t.TempDir()
+	m := NewManager(filepath.Join(home, "quick-replies.toml"), filepath.Join(home, "project-quick-replies"))
 	replies := []QuickReply{
-		{Name: "Valid", Body: "ok", Category: "requirements"},
-		{Name: "Invalid cat", Body: "bad", Category: "hacker_attack"},
-		{Name: "Empty cat", Body: "fine"},
+		{Name: "Valid", Body: "ok", Category: "requirements", Scope: ScopePublic},
+		{Name: "Invalid cat", Body: "bad", Category: "hacker_attack", Scope: ScopePublic},
+		{Name: "Invalid scope", Body: "fallback", Scope: "shared"},
 	}
 
-	if err := m.Save(replies); err != nil {
+	if _, err := m.Save("", "", replies); err != nil {
 		t.Fatal(err)
 	}
-	got := m.Load()
-	if len(got) != 3 {
-		t.Fatalf("len = %d, want 3", len(got))
+	got, err := m.Load("")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got[0].Category != "requirements" {
-		t.Errorf("got[0].Category = %q, want 'requirements'", got[0].Category)
+	if len(got.Replies) != 3 {
+		t.Fatalf("len = %d, want 3", len(got.Replies))
 	}
-	if got[1].Category != "" {
-		t.Errorf("got[1].Category = %q, want '' (rejected)", got[1].Category)
+	if got.Replies[0].Category != "requirements" {
+		t.Errorf("got[0].Category = %q, want 'requirements'", got.Replies[0].Category)
 	}
-	if got[2].Category != "" {
-		t.Errorf("got[2].Category = %q, want ''", got[2].Category)
+	if got.Replies[1].Category != "" {
+		t.Errorf("got[1].Category = %q, want ''", got.Replies[1].Category)
+	}
+	if got.Replies[1].Scope != ScopePublic {
+		t.Errorf("got[1].Scope = %q, want %q", got.Replies[1].Scope, ScopePublic)
+	}
+	if got.Replies[2].Scope != ScopePublic {
+		t.Errorf("got[2].Scope = %q, want %q", got.Replies[2].Scope, ScopePublic)
+	}
+}
+
+func TestManagerProjectIsolation(t *testing.T) {
+	home := t.TempDir()
+	projectsBase := filepath.Join(home, "Projects")
+	workspaceA := filepath.Join(projectsBase, "reasonix")
+	workspaceB := filepath.Join(projectsBase, "yak")
+	for _, dir := range []string{workspaceA, workspaceB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projectRoot := filepath.Join(home, "project-quick-replies")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "config.toml"), []byte(`base_dirs = ["`+filepath.ToSlash(projectsBase)+`"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(filepath.Join(home, "quick-replies.toml"), projectRoot)
+	if _, err := m.Save(workspaceA, workspaceA, []QuickReply{
+		{Name: "Shared", Body: "For everyone", Scope: ScopePublic},
+		{Name: "Only A", Body: "For project A", Scope: ScopeProject},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Save(workspaceB, workspaceB, []QuickReply{
+		{Name: "Shared", Body: "For everyone", Scope: ScopePublic},
+		{Name: "Only B", Body: "For project B", Scope: ScopeProject},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	gotA, err := m.Load(workspaceA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantA := []QuickReply{
+		{Name: "Shared", Body: "For everyone", Scope: ScopePublic},
+		{Name: "Only A", Body: "For project A", Scope: ScopeProject},
+	}
+	if !reflect.DeepEqual(gotA.Replies, wantA) {
+		t.Fatalf("project A replies = %#v, want %#v", gotA.Replies, wantA)
+	}
+
+	gotB, err := m.Load(workspaceB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantB := []QuickReply{
+		{Name: "Shared", Body: "For everyone", Scope: ScopePublic},
+		{Name: "Only B", Body: "For project B", Scope: ScopeProject},
+	}
+	if !reflect.DeepEqual(gotB.Replies, wantB) {
+		t.Fatalf("project B replies = %#v, want %#v", gotB.Replies, wantB)
+	}
+}
+
+func TestManagerSaveRejectsStaleProjectContextWithoutWritingPublicReplies(t *testing.T) {
+	home := t.TempDir()
+	projectsBase := filepath.Join(home, "Projects")
+	workspaceA := filepath.Join(projectsBase, "reasonix")
+	workspaceB := filepath.Join(projectsBase, "yak")
+	for _, dir := range []string{workspaceA, workspaceB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projectRoot := filepath.Join(home, "project-quick-replies")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "config.toml"), []byte(`base_dirs = ["`+filepath.ToSlash(projectsBase)+`"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(filepath.Join(home, "quick-replies.toml"), projectRoot)
+	if _, err := m.Save(workspaceA, workspaceA, []QuickReply{
+		{Name: "Shared", Body: "Before", Scope: ScopePublic},
+		{Name: "Only A", Body: "For project A", Scope: ScopeProject},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := m.Save(workspaceB, workspaceA, []QuickReply{
+		{Name: "Shared", Body: "After", Scope: ScopePublic},
+		{Name: "Only A", Body: "For project A", Scope: ScopeProject},
+	})
+	if !errors.Is(err, ErrProjectContextChanged) {
+		t.Fatalf("Save stale context err = %v, want %v", err, ErrProjectContextChanged)
+	}
+
+	got, err := m.Load(workspaceA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []QuickReply{
+		{Name: "Shared", Body: "Before", Scope: ScopePublic},
+		{Name: "Only A", Body: "For project A", Scope: ScopeProject},
+	}
+	if !reflect.DeepEqual(got.Replies, want) {
+		t.Fatalf("replies after rejected save = %#v, want %#v", got.Replies, want)
+	}
+}
+
+func TestManagerSaveDoesNotPartiallyWriteWhenProjectScopeNeedsWorkspace(t *testing.T) {
+	home := t.TempDir()
+	m := NewManager(filepath.Join(home, "quick-replies.toml"), filepath.Join(home, "project-quick-replies"))
+	if _, err := m.Save("", "", []QuickReply{{Name: "Shared", Body: "Before", Scope: ScopePublic}}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := m.Save("", "", []QuickReply{
+		{Name: "Shared", Body: "After", Scope: ScopePublic},
+		{Name: "Project", Body: "Needs workspace", Scope: ScopeProject},
+	})
+	if !errors.Is(err, ErrWorkspaceNotConfigured) {
+		t.Fatalf("Save missing workspace err = %v, want %v", err, ErrWorkspaceNotConfigured)
+	}
+
+	got, err := m.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []QuickReply{{Name: "Shared", Body: "Before", Scope: ScopePublic}}
+	if !reflect.DeepEqual(got.Replies, want) {
+		t.Fatalf("public replies after rejected save = %#v, want %#v", got.Replies, want)
+	}
+}
+
+func TestManagerLegacyPublicSaveDoesNotClearProjectReplies(t *testing.T) {
+	home := t.TempDir()
+	projectsBase := filepath.Join(home, "Projects")
+	workspace := filepath.Join(projectsBase, "reasonix")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	projectRoot := filepath.Join(home, "project-quick-replies")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "config.toml"), []byte(`base_dirs = ["`+filepath.ToSlash(projectsBase)+`"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(filepath.Join(home, "quick-replies.toml"), projectRoot)
+	if _, err := m.Save(workspace, workspace, []QuickReply{
+		{Name: "Shared", Body: "Before", Scope: ScopePublic},
+		{Name: "Project", Body: "Keep me", Scope: ScopeProject},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Save(workspace, "", []QuickReply{{Name: "Shared", Body: "After", Scope: ScopePublic}}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := m.Load(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []QuickReply{
+		{Name: "Shared", Body: "After", Scope: ScopePublic},
+		{Name: "Project", Body: "Keep me", Scope: ScopeProject},
+	}
+	if !reflect.DeepEqual(got.Replies, want) {
+		t.Fatalf("replies after legacy public save = %#v, want %#v", got.Replies, want)
 	}
 }

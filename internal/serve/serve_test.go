@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"reasonix/internal/eventwire"
 	"reasonix/internal/jobs"
 	"reasonix/internal/provider"
+	"reasonix/internal/quickreply"
 )
 
 // fakeRunner stands in for an agent.Runner: it records the composed input and
@@ -151,7 +153,7 @@ func TestServeQuickReplyScriptEndpoint(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
 		t.Fatalf("quickreply.js content-type = %q, want application/javascript", ct)
 	}
-	for _, want := range []string{"const AUTO_SEND_KEY =", "function openComposerPicker()", "function saveReply()", "void loadReplies();"} {
+	for _, want := range []string{"const AUTO_SEND_KEY =", "function renderScopeTabs()", "function openComposerPicker()", "function saveReply()"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("quickreply.js missing %q", want)
 		}
@@ -384,16 +386,20 @@ func TestServeQuickRepliesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
+	var initial struct {
+		Project quickreply.Project      `json:"project"`
+		Replies []quickreply.QuickReply `json:"replies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&initial); err != nil {
+		resp.Body.Close()
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(string(body)) != "[]" {
-		t.Fatalf("initial quick replies = %s, want []", string(body))
+	resp.Body.Close()
+	if len(initial.Replies) != 0 {
+		t.Fatalf("initial quick replies len = %d, want 0", len(initial.Replies))
 	}
 
-	payload := `[{"name":"Ack","body":"On it","category":"requirements"},{"name":"Invalid","body":"Needs cleanup","category":"bogus"}]`
+	payload := `{"replies":[{"name":"Ack","body":"On it","category":"requirements","scope":"public"},{"name":"Invalid","body":"Needs cleanup","category":"bogus","scope":"public"}]}`
 	resp, err = http.Post(srv.URL+"/quick-replies", "application/json", strings.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
@@ -401,29 +407,225 @@ func TestServeQuickRepliesRoundTrip(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("quick replies POST status = %d, want 200", resp.StatusCode)
 	}
-	body, err = io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
+	var posted struct {
+		Project quickreply.Project      `json:"project"`
+		Replies []quickreply.QuickReply `json:"replies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&posted); err != nil {
+		resp.Body.Close()
 		t.Fatal(err)
 	}
-	got := strings.TrimSpace(string(body))
-	want := `[{"name":"Ack","body":"On it","category":"requirements"},{"name":"Invalid","body":"Needs cleanup"}]`
-	if got != want {
-		t.Fatalf("quick replies POST body = %s, want %s", got, want)
+	resp.Body.Close()
+	want := []quickreply.QuickReply{
+		{Name: "Ack", Body: "On it", Category: "requirements", Scope: quickreply.ScopePublic},
+		{Name: "Invalid", Body: "Needs cleanup", Scope: quickreply.ScopePublic},
+	}
+	if !reflect.DeepEqual(posted.Replies, want) {
+		t.Fatalf("quick replies POST body = %#v, want %#v", posted.Replies, want)
 	}
 
 	resp, err = http.Get(srv.URL + "/quick-replies")
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err = io.ReadAll(resp.Body)
+	var final struct {
+		Project quickreply.Project      `json:"project"`
+		Replies []quickreply.QuickReply `json:"replies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&final); err != nil {
+		resp.Body.Close()
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if !reflect.DeepEqual(final.Replies, want) {
+		t.Fatalf("quick replies round-trip = %#v, want %#v", final.Replies, want)
+	}
+}
+
+func TestServeQuickRepliesAcceptsLegacyArrayPost(t *testing.T) {
+	t.Setenv("REASONIX_HOME", t.TempDir())
+
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/quick-replies", "application/json", strings.NewReader(`[{"name":"Ack","body":"On it"}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("legacy POST /quick-replies status = %d: %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		Replies []quickreply.QuickReply `json:"replies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	want := []quickreply.QuickReply{{Name: "Ack", Body: "On it", Scope: quickreply.ScopePublic}}
+	if !reflect.DeepEqual(out.Replies, want) {
+		t.Fatalf("legacy POST replies = %#v, want %#v", out.Replies, want)
+	}
+}
+
+func TestServeQuickRepliesProjectScopeRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+
+	projectsBase := filepath.Join(home, "Projects")
+	workspaceA := filepath.Join(projectsBase, "reasonix")
+	workspaceB := filepath.Join(projectsBase, "yak")
+	for _, dir := range []string{workspaceA, workspaceB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projectRoot := filepath.Join(home, "project-quick-replies")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "config.toml"), []byte(`base_dirs = ["`+filepath.ToSlash(projectsBase)+`"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newServer := func(workspace string) *httptest.Server {
+		bc := NewBroadcaster()
+		ctrl := control.New(control.Options{Sink: bc, WorkspaceRoot: workspace})
+		return httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	}
+
+	srvA := newServer(workspaceA)
+	defer srvA.Close()
+	srvB := newServer(workspaceB)
+	defer srvB.Close()
+
+	postReplies := func(t *testing.T, url string, payload string) []quickreply.QuickReply {
+		t.Helper()
+		resp, err := http.Post(url+"/quick-replies", "application/json", strings.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("POST /quick-replies status = %d: %s", resp.StatusCode, string(body))
+		}
+		var out struct {
+			Replies []quickreply.QuickReply `json:"replies"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out.Replies
+	}
+
+	postReplies(t, srvA.URL, `{"replies":[{"name":"Shared","body":"For everyone","scope":"public"},{"name":"A only","body":"For A","scope":"project"}]}`)
+	postReplies(t, srvB.URL, `{"replies":[{"name":"Shared","body":"For everyone","scope":"public"},{"name":"B only","body":"For B","scope":"project"}]}`)
+
+	checkReplies := func(t *testing.T, url string, wantProjectID string, want []quickreply.QuickReply) {
+		t.Helper()
+		resp, err := http.Get(url + "/quick-replies")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out struct {
+			Project quickreply.Project      `json:"project"`
+			Replies []quickreply.QuickReply `json:"replies"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		if out.Project.ID != wantProjectID {
+			t.Fatalf("project id = %q, want %q", out.Project.ID, wantProjectID)
+		}
+		if !reflect.DeepEqual(out.Replies, want) {
+			t.Fatalf("replies = %#v, want %#v", out.Replies, want)
+		}
+	}
+
+	checkReplies(t, srvA.URL, "reasonix", []quickreply.QuickReply{
+		{Name: "Shared", Body: "For everyone", Scope: quickreply.ScopePublic},
+		{Name: "A only", Body: "For A", Scope: quickreply.ScopeProject},
+	})
+	checkReplies(t, srvB.URL, "yak", []quickreply.QuickReply{
+		{Name: "Shared", Body: "For everyone", Scope: quickreply.ScopePublic},
+		{Name: "B only", Body: "For B", Scope: quickreply.ScopeProject},
+	})
+}
+
+func TestServeQuickRepliesRejectsStaleProjectContext(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+
+	projectsBase := filepath.Join(home, "Projects")
+	workspaceA := filepath.Join(projectsBase, "reasonix")
+	workspaceB := filepath.Join(projectsBase, "yak")
+	for _, dir := range []string{workspaceA, workspaceB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projectRoot := filepath.Join(home, "project-quick-replies")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "config.toml"), []byte(`base_dirs = ["`+filepath.ToSlash(projectsBase)+`"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newServer := func(workspace string) *httptest.Server {
+		bc := NewBroadcaster()
+		ctrl := control.New(control.Options{Sink: bc, WorkspaceRoot: workspace})
+		return httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	}
+	srvA := newServer(workspaceA)
+	defer srvA.Close()
+	srvB := newServer(workspaceB)
+	defer srvB.Close()
+
+	resp, err := http.Post(srvA.URL+"/quick-replies", "application/json", strings.NewReader(`{"projectRoot":"`+filepath.ToSlash(workspaceA)+`","replies":[{"name":"Shared","body":"Before","scope":"public"},{"name":"A only","body":"For A","scope":"project"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("seed POST status = %d, want 200", resp.StatusCode)
+	}
+
+	resp, err = http.Post(srvB.URL+"/quick-replies", "application/json", strings.NewReader(`{"projectRoot":"`+filepath.ToSlash(workspaceA)+`","replies":[{"name":"Shared","body":"After","scope":"public"},{"name":"A only","body":"For A","scope":"project"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got = strings.TrimSpace(string(body))
-	if got != want {
-		t.Fatalf("quick replies round-trip = %s, want %s", got, want)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("stale context POST status = %d, want 409: %s", resp.StatusCode, string(body))
+	}
+
+	resp, err = http.Get(srvA.URL + "/quick-replies")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Replies []quickreply.QuickReply `json:"replies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	want := []quickreply.QuickReply{
+		{Name: "Shared", Body: "Before", Scope: quickreply.ScopePublic},
+		{Name: "A only", Body: "For A", Scope: quickreply.ScopeProject},
+	}
+	if !reflect.DeepEqual(out.Replies, want) {
+		t.Fatalf("replies after stale save = %#v, want %#v", out.Replies, want)
 	}
 }
 
