@@ -142,11 +142,12 @@ function hideFeatureEditor() {
   if (!editor) return;
   editor.classList.remove('ft-editor--open');
   document.getElementById('ft-title').value = '';
-  document.getElementById('ft-status').value = 'wishlist';
+  document.getElementById('ft-status').value = activeTab || 'wishlist';
   document.getElementById('ft-priority').value = 'medium';
   document.getElementById('ft-summary').value = '';
   document.getElementById('ft-notes').value = '';
   document.getElementById('ft-editor-title').textContent = t('新增特性', 'Add Feature');
+  document.getElementById('ft-delete').style.display = 'none';
   setFeatureTrackerError('');
 }
 
@@ -155,7 +156,7 @@ function showFeatureEditor(feature) {
   if (!editor) return;
   editingFeatureId = feature?.id || null;
   document.getElementById('ft-title').value = feature?.title || '';
-  document.getElementById('ft-status').value = feature?.status || 'wishlist';
+  document.getElementById('ft-status').value = feature?.status || activeTab || 'wishlist';
   document.getElementById('ft-priority').value = feature?.priority || 'medium';
   document.getElementById('ft-summary').value = feature?.summary || '';
   document.getElementById('ft-notes').value = feature?.notes || '';
@@ -291,7 +292,12 @@ function saveFeature() {
   } else {
     nextFeatures.push(next);
   }
-  persistFeatures(nextFeatures, hideFeatureEditor);
+  persistFeatures(nextFeatures, () => {
+    activeTab = safeStatus;
+    renderTabs();
+    renderFeatureSections();
+    hideFeatureEditor();
+  });
 }
 
 function deleteFeature(id) {

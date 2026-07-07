@@ -1342,7 +1342,7 @@ func (s *Server) quickReplies(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		writeJSON(w, s.qr.Load())
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

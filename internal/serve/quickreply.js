@@ -64,6 +64,7 @@ let qrReplies = [];
 let categories = [];
 let editingIndex = -1;
 let saving = false;
+let loadingReplies = false;
 let activeCategory = ''; // '' = show all
 
 function escapeHTML(value) {
@@ -135,10 +136,22 @@ function hideEditor() {
   if (title) title.textContent = t('新增快捷回复', 'Add Quick Reply');
   if (name) name.value = '';
   if (body) body.value = '';
+  const catSelect = document.getElementById('qr-category');
+  if (catSelect) catSelect.value = '';
   setError('');
 }
 
+function syncReplyControls() {
+  const addButton = document.getElementById('qr-add');
+  const saveButton = document.getElementById('qr-save');
+  if (addButton) addButton.disabled = loadingReplies || saving;
+  if (saveButton) saveButton.disabled = loadingReplies || saving;
+}
+
 function showEditor(index) {
+  if (loadingReplies) {
+    return;
+  }
   editingIndex = typeof index === 'number' ? index : -1;
   const editor = document.getElementById('qr-editor');
   const title = document.getElementById('qr-editor-title');
@@ -211,6 +224,13 @@ function renderList() {
     return;
   }
   list.innerHTML = '';
+  if (loadingReplies) {
+    const loading = document.createElement('div');
+    loading.className = 'qr-empty';
+    loading.textContent = t('加载中...', 'Loading...');
+    list.appendChild(loading);
+    return;
+  }
 
   // Map with original index so edit/delete still refer to the correct item
   const indexed = qrReplies.map((reply, idx) => ({ reply, idx }));
@@ -248,14 +268,11 @@ function renderList() {
 }
 
 function persistReplies(nextReplies, onSuccess) {
-  if (saving) {
+  if (saving || loadingReplies) {
     return;
   }
   saving = true;
-  const saveButton = document.getElementById('qr-save');
-  if (saveButton) {
-    saveButton.disabled = true;
-  }
+  syncReplyControls();
   setError('');
   fetch('/quick-replies', {
     method: 'POST',
@@ -265,7 +282,9 @@ function persistReplies(nextReplies, onSuccess) {
     if (!response.ok) {
       throw new Error('save failed');
     }
-    qrReplies = cloneReplies(nextReplies);
+    return response.json();
+  }).then((savedReplies) => {
+    qrReplies = cloneReplies(Array.isArray(savedReplies) ? savedReplies : []);
     renderCategoryTabs();
     renderList();
     if (typeof onSuccess === 'function') {
@@ -275,9 +294,7 @@ function persistReplies(nextReplies, onSuccess) {
     setError(t('保存失败：' + error.message, 'Save failed: ' + error.message));
   }).finally(() => {
     saving = false;
-    if (saveButton) {
-      saveButton.disabled = false;
-    }
+    syncReplyControls();
   });
 }
 
@@ -325,6 +342,9 @@ function deleteReply(index) {
 }
 
 function handleListClick(event) {
+  if (loadingReplies) {
+    return;
+  }
   const target = event.target.closest('[data-action]');
   if (!target) {
     return;
@@ -434,13 +454,16 @@ function openComposerPicker() {
   if (toggle) {
     toggle.checked = autoSendEnabled();
   }
-  renderCategoryTabs();
-  renderList();
   hideEditor();
   modal.style.display = 'flex';
+  void loadReplies();
 }
 
 function loadReplies() {
+  loadingReplies = true;
+  syncReplyControls();
+  renderCategoryTabs();
+  renderList();
   return fetch('/quick-replies')
     .then((response) => {
       if (!response.ok) {
@@ -450,11 +473,13 @@ function loadReplies() {
     })
     .then((replies) => {
       qrReplies = cloneReplies(Array.isArray(replies) ? replies : []);
-      renderCategoryTabs();
-      renderList();
     })
     .catch(() => {
       qrReplies = [];
+    })
+    .finally(() => {
+      loadingReplies = false;
+      syncReplyControls();
       renderCategoryTabs();
       renderList();
     });

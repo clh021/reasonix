@@ -151,7 +151,7 @@ func TestServeQuickReplyScriptEndpoint(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
 		t.Fatalf("quickreply.js content-type = %q, want application/javascript", ct)
 	}
-	for _, want := range []string{"const AUTO_SEND_KEY =", "function openComposerPicker()", "function saveReply()"} {
+	for _, want := range []string{"const AUTO_SEND_KEY =", "function openComposerPicker()", "function saveReply()", "void loadReplies();"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("quickreply.js missing %q", want)
 		}
@@ -179,7 +179,7 @@ func TestServeProjectTrackerScriptEndpoint(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
 		t.Fatalf("projecttracker.js content-type = %q, want application/javascript", ct)
 	}
-	for _, want := range []string{"const FEATURE_STATUSES =", "function openFeatureTracker()", "function saveFeature()"} {
+	for _, want := range []string{"const FEATURE_STATUSES =", "function openFeatureTracker()", "function saveFeature()", "activeTab = safeStatus;\n    renderTabs();\n    renderFeatureSections();"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("projecttracker.js missing %q", want)
 		}
@@ -393,14 +393,23 @@ func TestServeQuickRepliesRoundTrip(t *testing.T) {
 		t.Fatalf("initial quick replies = %s, want []", string(body))
 	}
 
-	payload := `[{"name":"Ack","body":"On it"}]`
+	payload := `[{"name":"Ack","body":"On it","category":"requirements"},{"name":"Invalid","body":"Needs cleanup","category":"bogus"}]`
 	resp, err = http.Post(srv.URL+"/quick-replies", "application/json", strings.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("quick replies POST status = %d, want 200", resp.StatusCode)
+	}
+	body, err = io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("quick replies POST status = %d, want 204", resp.StatusCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.TrimSpace(string(body))
+	want := `[{"name":"Ack","body":"On it","category":"requirements"},{"name":"Invalid","body":"Needs cleanup"}]`
+	if got != want {
+		t.Fatalf("quick replies POST body = %s, want %s", got, want)
 	}
 
 	resp, err = http.Get(srv.URL + "/quick-replies")
@@ -412,9 +421,9 @@ func TestServeQuickRepliesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := strings.TrimSpace(string(body))
-	if got != payload {
-		t.Fatalf("quick replies round-trip = %s, want %s", got, payload)
+	got = strings.TrimSpace(string(body))
+	if got != want {
+		t.Fatalf("quick replies round-trip = %s, want %s", got, want)
 	}
 }
 
